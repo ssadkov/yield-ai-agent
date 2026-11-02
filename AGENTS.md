@@ -1,0 +1,186 @@
+# Yield AI Agent — бриф для агента
+
+> Написан 2026-11-02 для агента, который начинает этот репозиторий с нуля.
+> Агент работает на компьютере Сергея, все пути `C:\work\…` доступны.
+> Ответы Сергею: по-русски, с рекомендацией, а не меню вариантов. Даты пиши абсолютными (2026-11-14).
+
+---
+
+## 0. Что это и в каком состоянии
+
+`C:\work\yield-ai-agent` — новый репозиторий для участия Yield AI в NEAR Hackathon.
+Сейчас в нём только этот бриф (`git init`, remote нет).
+
+**Что уже решено (Сергей, 2026-11-01):**
+- Страница `yieldai.app/agent`: пользователь подключает **Solana-кошелёк** (Phantom/Solflare), получает
+  производный (derived) Aptos-аккаунт и Safe, пополняет его через **NEAR Intents 1-Click**, а потом
+  советуется с **private AI-чатом** (NEAR AI Cloud, TEE).
+- Порядок работы: **1) подключение кошелька → 2) Intents → 3) private-чат.**
+- Отдельный репозиторий, потому что основной `ssadkov/yield-ai` приватный, а на хакатон нужен публичный код.
+- Сначала Solana, Aptos-кошелёк (Petra и др.) — второстепенная ссылка на той же странице, через тот же адаптер.
+- Agent API (agentsonintents.com) **не используем**. Orca / Exponent / плечо Kamino — после 2026-11-14.
+
+**Твоя задача сейчас — только этап 1 (раздел 2).** Этапы 2–3 описаны для контекста.
+
+---
+
+## 1. Жёсткие ограничения
+
+1. **Домен — часть ключа.** Derived-адрес Aptos считается из `window.location.host`
+   (`@aptos-labs/derived-wallet-solana`, переопределить нельзя). Один и тот же Phantom даёт разные Aptos-адреса
+   на `yieldai.app`, `localhost:3000`, `localhost:3001` и на каждом Vercel-preview. Сейф, созданный на чужом хосте,
+   владелец потом не сможет вывести. Поэтому:
+   - прод-страница работает только как `https://yieldai.app/agent` (rewrite из основного приложения, см. 2.2),
+     **не** на поддомене и не на своём Vercel-домене;
+   - **на этапе 1 сейфы не создаём вообще** — только чтение и показ адресов;
+   - когда дойдёт до создания — копируй правило `canCreateSafeForWallet` из основного репо (ссылка в разделе 6).
+2. **Репозиторий станет публичным.** Никаких ключей, `.env`, приватных ключей, внутренних документов
+   (`C:\work\context\**`, `INTERNAL_PRODUCT_KB.md`, TVL, условия гранта, переписки). `.env*` — в `.gitignore`.
+3. **Ничего наружу без Сергея:** не создавай GitHub-репозиторий, не пушь, не деплой, не подписывай
+   mainnet-транзакции. Это делает Сергей после проверки.
+4. **Не трогай рабочую копию `C:\work\yield-ai`.** Там чужая ветка и незакоммиченные файлы. Читай код основного
+   приложения из `origin/main`, без checkout:
+   `git -C C:\work\yield-ai show origin/main:src/lib/WalletProvider.tsx`
+   (рабочая копия отстаёт от main: например, `derivedSafeHost.ts` есть только в `origin/main`).
+5. **API Echelon (`app.echelon.market`) не доверяем** — их сайт был взломан 2026-10-31. Данные Echelon — только on-chain
+   или через проверки основного приложения.
+6. Код, написанный до 2026-10-19, и код основного приложения — **baseline**: импортируй его отдельным коммитом
+   с пометкой в README (правила Q-001/Q-002/Q-005, раздел 5).
+
+---
+
+## 2. Этап 1 — подключение кошелька (задача сейчас)
+
+### 2.1. Что сделать
+
+Next.js-приложение (App Router, TypeScript, Tailwind v4), `basePath: '/agent'`. Одна страница:
+
+1. **Главная кнопка «Connect Solana wallet»** — список Solana-кошельков (Phantom, Solflare, …).
+   Подключение идёт через **Aptos wallet adapter** к кошельку вида `"Phantom (Solana)"` (derived),
+   Solana-сторона синхронизируется так же, как в основном приложении (`SolanaWalletRestore`).
+2. **Второстепенная ссылка «I have an Aptos wallet»** — нативные Aptos-кошельки (Petra и т.д.) тем же адаптером.
+3. После подключения показать:
+   - Solana-адрес и Aptos-адрес (derived или нативный, с пометкой какой);
+   - текущий хост и предупреждение, если хост не `yieldai.app`: «адрес Aptos на этом хосте отличается от прода,
+     сейф здесь не создавать»;
+   - список сейфов владельца: `GET /api/protocols/yield-ai/safes?owner=<aptosAddress>` (API основного приложения);
+   - балансы (опционально): публичный API `GET /api/public/v1/wallet/{address}/balance` — для Aptos и Solana
+     (`C:\work\yield-ai\docs\public-wallet-api.md`).
+4. Отключение кошелька, восстановление сессии после перезагрузки.
+
+**Готово, когда:**
+- `pnpm build` и `npx tsc --noEmit` проходят;
+- локально Phantom подключается, видны оба адреса и сейфы (на localhost адрес будет «локальный» — это ожидаемо);
+- в README описано: что это, как запустить, что взято из основного приложения (baseline), что написано в окне хакатона;
+- первая проверка на проде описана как шаг для Сергея: Phantom на `yieldai.app/agent` должен показать **тот же**
+  Aptos-адрес, что и на `yieldai.app`. Если адреса разные — дальше не идём.
+
+### 2.2. Архитектура (решено)
+
+- **Multi-zone Next.js:** это приложение деплоится отдельно с `basePath: '/agent'`; основное приложение `yield-ai`
+  делает rewrite `/agent` и `/agent/:path*` → этот деплой. Браузер остаётся на `yieldai.app`, поэтому derived-адрес
+  совпадает с прод-адресом, а `localStorage` кошелька общий с главной.
+- Rewrite в `yield-ai` — отдельный PR в основном репо, **не твоя задача сейчас**. Нюанс для него: admin-cookie
+  основного приложения ставится на path `/` (`src/lib/admin/session.ts`), поэтому при проксировании `/agent` заголовок
+  `cookie` надо срезать (middleware), чтобы он не уходил во внешний деплой.
+- **Запросы к API.** В проде браузер на `yieldai.app`, поэтому `fetch('/api/…')` попадает в основное приложение.
+  Для локальной разработки и прямого домена деплоя добавь rewrite `/api/:path*` → `https://yieldai.app/api/:path*`
+  с `basePath: false`. Свой сервер на этапе 1 не нужен.
+- **Gas Station** (бесплатный газ для derived-кошельков) на этапе 1 не нужен — понадобится при создании сейфа
+  (`src/lib/services/gasStation.ts`, `createAgentSafe.ts` в основном репо).
+
+### 2.3. Что взять из основного приложения (`origin/main` в `C:\work\yield-ai`)
+
+| Файл | Зачем |
+|---|---|
+| `src/lib/WalletProvider.tsx` | `AptosWalletAdapterProvider`, `setupAutomaticSolanaWalletDerivation`, `crossChainWallets: true`, `autoConnect`-логика, подавление шумных ошибок. EVM-derivation и Gas Station на этапе 1 можно убрать |
+| `src/lib/SolanaProvider.tsx` | Solana `ConnectionProvider` / `WalletProvider` |
+| `src/components/SolanaWalletRestore.tsx` | синхронизация Solana-адаптера, когда подключён derived-кошелёк `"X (Solana)"` |
+| `src/components/AptosWalletRestore.tsx` | восстановление Aptos-сессии, флаг `skip_auto_connect_derived_aptos` |
+| `src/components/wallet/customAptosConnectDialogContent.tsx` | как основное приложение показывает derived-кошельки в диалоге |
+| `src/components/SolanaWalletSelector.tsx`, `src/components/WalletSelector.tsx` | текущие кнопки подключения (Solana и Aptos) |
+| `src/lib/aptosWalletUtils.ts` | `isDerivedAptosWallet`, `isDerivedAptosWalletReliable`, `derivedWalletChainFromName` |
+| `src/lib/hooks/useEffectiveWalletAddresses.ts` | как берутся итоговые адреса (включая WebView-мобилку — её можно не переносить) |
+| `src/lib/protocols/yield-ai/derivedSafeHost.ts` | правило «где можно создавать сейф derived-кошельку» и объяснение, почему |
+| `src/lib/utils/addressNormalization.ts` | нормализация Aptos-адресов |
+| `src/app/api/protocols/yield-ai/safes/route.ts` | формат ответа `safes?owner=` |
+
+Версии пакетов — как в `package.json` основного приложения (на 2026-11-02): `next ^15.4.10`, `react ^19`,
+`@aptos-labs/wallet-adapter-react ^7.1.0`, `@aptos-labs/derived-wallet-solana ^0.8.1`, `@aptos-labs/ts-sdk ^5.2.1`,
+`@solana/wallet-adapter-react ^0.15.39`, `@solana/wallet-adapter-wallets ^0.19.37`, `@solana/web3.js ^1.98.4`,
+`@tanstack/react-query ^5.90.20`, `tailwindcss ^4`. Пакетный менеджер — `pnpm`.
+
+Исходники адаптера (если надо понять derived-кошельки): `C:\work\aptos-wallet-adapter\packages\derived-wallet-solana`.
+
+---
+
+## 3. Этап 2 — депозит через NEAR Intents 1-Click (позже)
+
+- Маршрут: Tron USDT / вывод с биржи → одноразовый адрес 1-Click → USDt/USDC в Safe на Aptos. Возможно, SOL из Phantom
+  (котировку ещё не снимали). USDC с Solana дешевле через собственный CCTP-мост основного приложения — его не дублируем.
+- Исследование и замеры: `C:\work\yield-ai\.worktrees\near-intents-1click\docs\near-intents-1click-deposit-check.md`,
+  скрипт котировок `…\scripts\near-intents-1click-quote-matrix.mjs` (ветка `research/near-intents-1click`, не запушена).
+- Без сейфа депозиту некуда прийти: сначала создание сейфа (с правилом хоста), потом депозит.
+- Тестнета Intents нет: mainnet, малые суммы, `dry: true` для котировок. JWT 1-Click не нужен (комиссия 0.2%).
+- Подводный камень: выплата приходит через `omni_bridge::fin_transfer` в primary store сейфа — учёт потоков основного
+  приложения (Boost, deposit-history) такой приход не видит.
+
+## 4. Этап 3 — private AI-чат (позже)
+
+- Основа — чат Рустама: ветка `feature/gpt-chat-panel` в `C:\work\yield-ai`, PR https://github.com/ssadkov/yield-ai/pull/411.
+  Бриф для него: `C:\work\yield-ai\docs\handoff\ai-chat-provider-agnostic.md` (файл не закоммичен, лежит только на диске).
+- Переносится: `src/lib/chat/providers/index.ts`, `config.ts`, `rateLimit.ts`, `history.ts`, `tools/*`,
+  `src/components/chat/ChatMarkdown.tsx`, `src/app/api/chat/route.ts`, форматирование из `portfolioContext.ts`.
+  Остаётся в yield-ai: `GptChatPanel.tsx`, сборка контекста из сторов, Boost-контекст.
+  `productKnowledge.ts` — переписать под путь «Phantom → derived Safe».
+- Доходности берём с `/api/protocols/yield-ai/strategy-yields` основного приложения, а не копируем `strategyYields.ts`.
+- Нет ещё: подключения NEAR AI (`https://cloud-api.near.ai/v1`), аттестации и проверки подписи ответа,
+  инструмента «план под подпись», доходностей Solana/Kamino.
+- В private-режиме — без молчаливого fallback на OpenAI; в интерфейсе честно: наш сервер видит текст запроса,
+  аттестация покрывает только модель. Нужен общий потолок расходов (кредиты NEAR AI — $10).
+
+## 5. Правила хакатона (коротко)
+
+- Сайт: https://nearhackathon.com/ · правила и FAQ: https://github.com/nearai/near-hackathon-prompt-examples (`HACKATHON.md`).
+- Разработка 2026-11-01…14, подача до **2026-11-14 23:59 UTC**, судейство 2026-11-16…18. Подача = публичный репозиторий + пост с демо в X.
+- Q-001: засчитывается код с 2026-10-19, раньше — baseline. Q-002: существующий продукт на другой сети можно,
+  оценивается только интеграция с NEAR, сделанная в окне; раскрыть в README. Q-003: новый репозиторий не обязателен
+  (у нас он нужен из-за приватности основного). Q-005: свои старые библиотеки можно, перечислить в README.
+  Q-007: тестнета Intents нет. Q-012: нужно видео; хостинг демо держать до 2026-11-18, лучше до 2026-11-25.
+
+## 6. Ссылки
+
+**Репозитории в `C:\work`:**
+- `C:\work\yield-ai` — основное приложение (Next.js, Aptos + Solana, приватный, `ssadkov/yield-ai`). Начни с его `CLAUDE.md`.
+- `C:\work\yield-ai-os-sol` — Solana vault-программа и веб (`ssadkov/yield-ai-os-sol`): `programs/yield-vault/src/lib.rs`,
+  `web/src/lib/vault.ts` (список разрешённых программ), `docs/yield-ai-v2.md`. Нужен, только если демо пойдёт в Solana Safe/Kamino.
+- `C:\work\yield-ai-docs` — сайт документации (Docusaurus, `ssadkov/yield-ai-docs`). `INTERNAL_PRODUCT_KB.md` — внутренний, в репо не копировать.
+- `C:\work\aptos-wallet-adapter` — клон `aptos-labs/aptos-wallet-adapter` (исходники derived-кошельков).
+
+**Документация основного приложения (`C:\work\yield-ai\docs`):**
+- `derived-account-recovery.md` — почему домен — часть ключа и как восстановить доступ.
+- `ai-agent-strategies.md`, `strategy-registry-and-dn-v2.md` — стратегии агента и реестр.
+- `public-wallet-api.md` — публичный API балансов и позиций.
+- `bridge-usdc-plan.md`, `cctp-v2-aptos-migration.md` — собственный мост в сейф (CCTP + Circle Forwarding).
+- `handoff/ai-chat-provider-agnostic.md` — бриф по чату.
+
+**Код основного приложения (`origin/main`), кроме таблицы в 2.3:**
+- `src/lib/protocols/yield-ai/createAgentSafe.ts`, `vaultDeposit.ts` — создание сейфа и депозит.
+- `src/components/bridge/DestinationTarget.tsx`, `src/lib/bridge/forwarding.ts`, `src/app/bridge/page.tsx` — мост в сейф.
+- `src/app/recovery/` — публичная страница восстановления доступа derived-аккаунта.
+- `src/lib/services/gasStation.ts` — спонсирование газа.
+
+**Локальные заметки (только читать, в репо не копировать):**
+- `C:\Users\Sergei\.claude\projects\C--work-yield-ai\memory\near-intents-1click-deposit.md`
+- `C:\Users\Sergei\.claude\projects\C--work-yield-ai\memory\derived-account-domain-is-key-material.md`
+- `C:\Users\Sergei\.claude\projects\C--work-yield-ai\memory\bridge-to-safe-feature.md`
+- `C:\Users\Sergei\.claude\projects\C--work-yield-ai\memory\echelon-frontend-compromise-2026-10-31.md`
+- `C:\work\context\INDEX.md` — личный/стратегический контекст Сергея. Нужен только для вопросов о приоритетах;
+  `C:\work\context\local\` не открывать.
+
+---
+
+## 7. Когда закончишь этап 1
+
+Обнови раздел 0 этого файла (что сделано, что проверено, что нет) и напиши Сергею коротко:
+что работает, что не проверено, и один следующий шаг — проверку адреса на `yieldai.app/agent`.
