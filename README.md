@@ -13,7 +13,15 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000/agent.
+Open http://localhost:3000/agent. `http://localhost:3000/` redirects there.
+
+## Deploy
+
+Host the build on Vercel as its own project, imported from this repository. Do not attach `yieldai.app` or any subdomain to that project. The derived Aptos address uses the browser's host, so the page has to be opened as `https://yieldai.app/agent`.
+
+The main Yield AI app proxies `/agent` and `/agent/:path*` to this deployment's production URL (`https://<project>.vercel.app/agent/...`) and strips the `cookie` header on the way. `/api` stays on the main app. Until that proxy exists, `yieldai.app/agent` will not open.
+
+Opening the `*.vercel.app` URL directly is only a smoke test. The host warning on that URL is expected, and the Aptos address there is not the production one.
 
 `pnpm build` and `pnpm typecheck` are the checks.
 

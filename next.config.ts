@@ -13,6 +13,18 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   basePath: "/agent",
+  async redirects() {
+    // The app only exists under /agent. Opening the deployment root
+    // (localhost:3000 or the Vercel hostname) would otherwise 404.
+    return [
+      {
+        source: "/",
+        destination: "/agent",
+        basePath: false,
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return {
       beforeFiles: [
