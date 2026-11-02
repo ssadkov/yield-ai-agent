@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { WalletProvider } from "@/lib/WalletProvider";
 import { SolanaProvider } from "@/lib/SolanaProvider";
 import { SolanaWalletRestore } from "@/components/SolanaWalletRestore";
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </SolanaWalletRestore>
           </SolanaProvider>
         </WalletProvider>
+        <Analytics />
       </body>
     </html>
   );
