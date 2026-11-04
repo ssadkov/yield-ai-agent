@@ -16,9 +16,12 @@ import {
 import {
   buildUsdcDepositTx,
   formatUsdc,
-  panelSolanaRpc,
+  panelConnections,
   parseUsdc,
   readSolanaSafe,
+  safeAddress,
+  usdcAta,
+  withFallback,
   type SolanaSafeState,
 } from "@/lib/agent/solanaSafe";
 import {
@@ -91,11 +94,17 @@ export function IntentsDepositPanel({
   const { publicKey, connected, sendTransaction } = useWallet();
   const owner = connected && publicKey ? publicKey.toBase58() : null;
   const [host, setHost] = useState<string | null>(null);
-  const [connection, setConnection] = useState<Connection | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
   useEffect(() => {
     setHost(window.location.host);
-    setConnection(new Connection(panelSolanaRpc(window.location.host, window.location.origin), "confirmed"));
+    setConnections(panelConnections(window.location.host, window.location.origin));
   }, []);
+  // The Safe address needs no RPC: show it even when reads fail.
+  const derivedSafe = useMemo(() => {
+    if (!owner) return null;
+    const safe = safeAddress(new PublicKey(owner));
+    return { safe, ata: usdcAta(safe) };
+  }, [owner]);
 
   const [destination, setDestination] = useState<Destination>("solana-safe");
   const [amount, setAmount] = useState("1");
@@ -125,17 +134,17 @@ export function IntentsDepositPanel({
   }, [owner, host, aptosAddress, aptosIsDerived]);
 
   const refreshBalances = useCallback(async () => {
-    if (!owner || !connection) return;
+    if (!owner || connections.length === 0) return;
     setSafeError(null);
     try {
-      setSafe(await readSolanaSafe(connection, new PublicKey(owner)));
+      setSafe((await withFallback(connections, (c) => readSolanaSafe(c, new PublicKey(owner)))).value);
     } catch (e) {
-      setSafeError(`Solana RPC: ${errorText(e)}`);
+      setSafeError(`Solana RPC is busy, press Refresh. (${errorText(e)})`);
     }
     if (aptos?.production) {
       aptosUsdcRaw(aptos.production).then(setAptosBalance).catch(() => setAptosBalance(null));
     }
-  }, [owner, connection, aptos?.production]);
+  }, [owner, connections, aptos?.production]);
 
   useEffect(() => {
     void refreshBalances();
@@ -194,13 +203,13 @@ export function IntentsDepositPanel({
     async (t: Pick<Tracked, "destination" | "recipient">): Promise<bigint | null> => {
       try {
         if (t.destination === "aptos") return await aptosUsdcRaw(t.recipient);
-        if (!connection || !owner) return null;
-        return (await readSolanaSafe(connection, new PublicKey(owner))).safeUsdcRaw;
+        if (connections.length === 0 || !owner) return null;
+        return (await withFallback(connections, (c) => readSolanaSafe(c, new PublicKey(owner)))).value.safeUsdcRaw;
       } catch {
         return null;
       }
     },
-    [connection, owner]
+    [connections, owner]
   );
 
   const poll = useCallback(
@@ -237,7 +246,7 @@ export function IntentsDepositPanel({
   }, [owner, poll]);
 
   const send = async () => {
-    if (!owner || !connection || !quote || !recipient || amountRaw === null) return;
+    if (!owner || connections.length === 0 || !quote || !recipient || amountRaw === null) return;
     const q = quote.response;
     const depositAddress = q.quote.depositAddress;
     setError(null);
@@ -268,7 +277,9 @@ export function IntentsDepositPanel({
     setBusy("sign");
     try {
       const before = (await readRecipientRaw({ destination, recipient })) ?? BigInt(0);
-      const tx = await buildUsdcDepositTx(connection, new PublicKey(owner), depositKey, amountRaw);
+      const { value: tx, connection } = await withFallback(connections, (c) =>
+        buildUsdcDepositTx(c, new PublicKey(owner), depositKey, amountRaw)
+      );
       const txSig = await sendTransaction(tx, connection);
       const next: Tracked = {
         solanaOwner: owner,
@@ -329,11 +340,26 @@ export function IntentsDepositPanel({
           />
           <span className="text-sm leading-6">
             <span className="font-medium">Solana Safe</span>
-            {safe ? (
+            {derivedSafe ? (
               <span className="block text-muted-foreground">
-                Recipient: Safe <span className="font-mono">{shorten(safe.safe.toBase58())}</span>. 1-Click pays into its
-                USDC account <span className="font-mono">{shorten(safe.safeUsdcAta.toBase58())}</span>
-                {safe.safeExists ? ` (now ${formatUsdc(safe.safeUsdcRaw)} USDC).` : ". No Safe on-chain yet."}
+                Recipient: Safe{" "}
+                <a
+                  className={`${linkClass} font-mono`}
+                  href={`https://solscan.io/account/${derivedSafe.safe.toBase58()}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {shorten(derivedSafe.safe.toBase58())}
+                </a>
+                . 1-Click pays into its USDC account{" "}
+                <span className="font-mono">{shorten(derivedSafe.ata.toBase58())}</span>
+                {!safe
+                  ? safeError
+                    ? ". Balance not loaded."
+                    : ". Reading…"
+                  : safe.safeExists
+                    ? ` (now ${formatUsdc(safe.safeUsdcRaw)} USDC).`
+                    : ". No Safe on-chain yet."}
               </span>
             ) : null}
           </span>
