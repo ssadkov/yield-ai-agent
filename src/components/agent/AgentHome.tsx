@@ -5,6 +5,7 @@ import { CANONICAL_DERIVED_SAFE_HOST } from "@/lib/protocols/yield-ai/derivedSaf
 import { useAgentWallets } from "@/lib/agent/useAgentWallets";
 import { SessionPanel } from "@/components/agent/SessionPanel";
 import { WalletDialog } from "@/components/agent/WalletDialog";
+import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
 
 function usePageHost(): string | null {
   const [host, setHost] = useState<string | null>(null);
@@ -103,6 +104,13 @@ export function AgentHome() {
           </button>
         </section>
       )}
+
+      {session.connected && session.solanaAddress ? (
+        <IntentsDepositPanel
+          aptosAddress={session.aptosAddress}
+          aptosIsDerived={session.derivedChain === "solana"}
+        />
+      ) : null}
 
       <WalletDialog
         open={session.dialog === "solana"}
