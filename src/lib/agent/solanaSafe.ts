@@ -130,15 +130,50 @@ export async function buildUsdcDepositTx(
   return tx;
 }
 
+const PUBLICNODE_RPC = "https://solana-rpc.publicnode.com";
+
 /**
- * RPC for this panel. On yieldai.app the main app proxies Solana RPC same-origin at
- * /api/solana/rpc (it rejects other origins). Elsewhere the public api.mainnet-beta
- * endpoint answers browsers with 403 (checked 2026-11-04), so use PublicNode.
+ * RPC endpoints for this panel, in order of preference. On yieldai.app the main app
+ * proxies Solana RPC same-origin at /api/solana/rpc (it rejects other origins); its
+ * upstream key is shared by the whole site and can answer 429, so PublicNode is the
+ * fallback. Elsewhere the public api.mainnet-beta endpoint answers browsers with 403
+ * (checked 2026-11-04), so PublicNode is the only one.
  */
-export function panelSolanaRpc(host: string, origin: string): string {
-  return host.toLowerCase() === "yieldai.app"
-    ? `${origin}/api/solana/rpc`
-    : "https://solana-rpc.publicnode.com";
+export function panelSolanaRpcs(host: string, origin: string): string[] {
+  return host.toLowerCase() === "yieldai.app" ? [`${origin}/api/solana/rpc`, PUBLICNODE_RPC] : [PUBLICNODE_RPC];
+}
+
+/**
+ * No silent web3.js retry on 429: it waits ~8 s per endpoint before failing. Fail fast and
+ * let `withFallback` try the next endpoint instead.
+ */
+export function panelConnections(host: string, origin: string): Connection[] {
+  return panelSolanaRpcs(host, origin).map(
+    (url) => new Connection(url, { commitment: "confirmed", disableRetryOnRateLimit: true })
+  );
+}
+
+/** Runs `fn` against each connection in turn; returns the first success. */
+export async function withFallback<T>(
+  connections: Connection[],
+  fn: (connection: Connection) => Promise<T>
+): Promise<{ value: T; connection: Connection }> {
+  const errors: string[] = [];
+  for (const connection of connections) {
+    try {
+      return { value: await fn(connection), connection };
+    } catch (error) {
+      const host = (() => {
+        try {
+          return new URL(connection.rpcEndpoint).host;
+        } catch {
+          return connection.rpcEndpoint;
+        }
+      })();
+      errors.push(`${host}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  throw new Error(errors.join("; ") || "No Solana RPC endpoint");
 }
 
 export function formatUsdc(raw: bigint): string {
