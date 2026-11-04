@@ -1,6 +1,6 @@
 # Yield AI Agent
 
-Connect a Solana wallet, get a derived Aptos account, and see the Safes that account already owns. Deposit through NEAR Intents and the private advisor come later.
+Connect a Solana wallet, get a derived Aptos account, see the Safes that account already owns, and run a small test deposit through NEAR Intents 1-Click. The private advisor comes later.
 
 Built for the NEAR Hackathon (2026-11-01 – 2026-11-14) on top of the existing [Yield AI](https://yieldai.app) product.
 
@@ -27,6 +27,28 @@ Opening the `*.vercel.app` URL directly is only a smoke test. The host warning o
 
 Requests to `/api/...` are rewritten to `https://yieldai.app` when this app is the server (local dev, or opening this deployment on its own domain). On `yieldai.app` the main app serves `/api` itself. There is no API key in this repo. Owner Safes load from `GET /api/protocols/yield-ai/safes?owner=`. Token balances use `GET /api/public/v1/wallet/{address}/balance` and stay hidden when that route asks for a key.
 
+## Deposit test (NEAR Intents 1-Click)
+
+After a Solana wallet connects, the page shows a **Deposit test** panel. It sends 1 to 5 USDC from that wallet to a one-time 1-Click deposit address and tracks the payout. There are two destinations:
+
+- **Solana Safe** (program `yie1…`, [yield-ai-os-sol](https://github.com/ssadkov/yield-ai-os-sol)). The recipient is the Safe PDA `["vault", owner]`, never its USDC token account: 1-Click pays into ATA(recipient). The panel requires an existing Safe and Safe USDC account, and compares the Safe's USDC balance before and after.
+- **Aptos account (derived).** The recipient is the derived Aptos account for `yieldai.app`, computed in the browser. The route is enabled only when the same computation reproduces the address the wallet actually connected with on the current host. From there the user moves the funds into the Aptos Safe on yieldai.app. A direct transfer to an Aptos Safe address is not used, because this repo cannot confirm that the Safe credits it.
+
+How it works:
+
+- The panel calls the 1-Click API straight from the browser; the API allows CORS. It requests a real quote with refunds to the connected wallet, and refuses to send if the quote echoes a different recipient, refund address, asset or amount.
+- The user signs one Solana transfer: create the deposit address's USDC account idempotently, then `TransferChecked`. The panel submits the transaction hash to 1-Click and polls `/v0/status` every 5 s. Tracking survives a reload through `localStorage`.
+- Solana reads go through the main app's `/api/solana/rpc` on yieldai.app, and through PublicNode elsewhere (the public mainnet RPC answers browsers with 403). Aptos balances come from the public Aptos API.
+
+Checked on 2026-11-04 without signing anything:
+
+- The hand-built instructions are byte-for-byte the same as `@solana/spl-token`'s.
+- The Safe PDA and USDC account match the known pilot Safe.
+- Dry quotes echo the request, priced $1 → $0.99 to the Solana Safe in ~17 s and $1 → $0.98 to Aptos in ~35 s.
+- The computed production address for the pilot wallet is the derived account the main app already knows.
+
+The funded transfer itself still has to be made by a person with the wallet.
+
 ## What is new vs. baseline
 
 Hackathon rules Q-001, Q-002 and Q-005: code written before 2026-10-19, and the existing Yield AI product, are baseline. Only the NEAR integration built inside the window is the submission. This repository splits them in git history.
@@ -45,7 +67,7 @@ Hackathon rules Q-001, Q-002 and Q-005: code written before 2026-10-19, and the 
 | `src/lib/protocols/yield-ai/derivedSafeHost.ts` | Rule for where a derived wallet may create a Safe. Not used to create one here. |
 | `src/lib/utils/addressNormalization.ts` | Canonical Aptos addresses for the Safes query. |
 
-**Written for this hackathon** (from 2026-11-01): the `/agent` page, the Solana-first connect dialog, the native Aptos link, the host warning, and the Safe and balance reads. No Safe is created. No mainnet transaction is signed by this page.
+**Written for this hackathon** (from 2026-11-01): the `/agent` page, the Solana-first connect dialog, the native Aptos link, the host warning, the Safe and balance reads, and the NEAR Intents 1-Click deposit test (`src/lib/agent/oneClick.ts`, `solanaSafe.ts`, `aptosDerived.ts`, `src/components/agent/IntentsDepositPanel.tsx`). No Safe is created. The only transaction this page asks the wallet to sign is the deposit-test USDC transfer to a 1-Click deposit address.
 
 ## Production check
 
