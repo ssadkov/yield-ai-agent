@@ -152,7 +152,10 @@ Next.js-приложение (App Router, TypeScript, Tailwind v4), `basePath: '
 - Подводный камень: выплата приходит через `omni_bridge::fin_transfer` в primary store сейфа — учёт потоков основного
   приложения (Boost, deposit-history) такой приход не видит.
 
-## 4. Этап 3 — private AI-чат (позже)
+## 4. Этап 3 — private AI-чат
+
+> **Инструкция для реализации — [`docs/private-advisor.md`](docs/private-advisor.md)** (2026-11-09): архитектура,
+> задачи по порядку с критериями «готово», модели, инструменты, что переносить из PR #411. Ниже — история решений.
 
 - Основа — чат Рустама: ветка `feature/gpt-chat-panel` в `C:\work\yield-ai`, PR https://github.com/ssadkov/yield-ai/pull/411.
   Бриф для него: `C:\work\yield-ai\docs\handoff\ai-chat-provider-agnostic.md` (файл не закоммичен, лежит только на диске).

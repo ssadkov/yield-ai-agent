@@ -49,6 +49,16 @@ Checked on 2026-11-04 without signing anything:
 
 The funded transfer itself still has to be made by a person with the wallet.
 
+## Private advisor (in progress)
+
+A chat advisor that runs on NEAR AI Cloud inside a TEE. The browser encrypts every message to the model's
+attested key (end-to-end encryption), so the app's server only forwards ciphertext and adds the API key. Tool
+calls and their results are encrypted too. Actions are proposals only: the owner signs any transaction.
+
+Checked on 2026-11-07 with [`scripts/near-ai-e2ee-probe.mjs`](scripts/near-ai-e2ee-probe.mjs): encrypted message,
+encrypted streamed tool call and encrypted tool result all decrypt on `z-ai/glm-5.3-flash`. The chat itself is not
+built yet; the plan is in [docs/private-advisor.md](docs/private-advisor.md).
+
 ## What is new vs. baseline
 
 Hackathon rules Q-001, Q-002 and Q-005: code written before 2026-10-19, and the existing Yield AI product, are baseline. Only the NEAR integration built inside the window is the submission. This repository splits them in git history.
