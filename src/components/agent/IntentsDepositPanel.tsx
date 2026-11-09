@@ -56,6 +56,17 @@ function shorten(value: string): string {
   return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-6)}` : value;
 }
 
+/**
+ * Explorer link for the payout. 1-Click's `explorerUrl` came back as an empty string for
+ * both test payouts on 2026-11-04 (Solana and Aptos), so the page builds the link itself
+ * from the destination chain.
+ */
+function payoutExplorer(destination: Destination, hash: string): string {
+  return destination === "aptos"
+    ? `https://explorer.aptoslabs.com/txn/${encodeURIComponent(hash)}?network=mainnet`
+    : `https://solscan.io/tx/${encodeURIComponent(hash)}`;
+}
+
 function loadTracked(): Tracked | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -473,7 +484,7 @@ export function IntentsDepositPanel({
               Payout:{" "}
               <a
                 className={linkClass}
-                href={tx.explorerUrl ?? (tracked.destination === "aptos" ? `https://explorer.aptoslabs.com/txn/${tx.hash}?network=mainnet` : `https://solscan.io/tx/${tx.hash}`)}
+                href={payoutExplorer(tracked.destination, tx.hash)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
