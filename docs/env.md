@@ -10,7 +10,9 @@
 |---|---|---|
 | `NEAR_AI_API_KEY` | `src/app/api/near/[...path]/route.ts` | API-ключ NEAR AI Cloud. Браузер ходит на `/agent/api/near/…`; сервер подставляет `Authorization: Bearer …` и проксирует шифротекст в `https://cloud-api.near.ai`. Без ключа чат отвечает **503**. Ключ в браузер и в git не класть. |
 
-Как получить: [cloud.near.ai](https://cloud.near.ai) → workspace → API keys. Для хакатона удобен ключ со `spend_limit`.
+Как получить: [cloud.near.ai](https://cloud.near.ai) → workspace → API keys. **Обязательно ставь `spend_limit`** на ключ: это единственный жёсткий потолок расходов.
+
+Прокси пропускает с этим ключом только E2EE-чат к моделям из `src/lib/advisor/models.ts` (содержимое сообщений и инструментов — шифротекст, `max_tokens` ≤ 1200, без встроенных платных инструментов), их отчёты аттестации и подписи ответов. Всё остальное — 4xx. Правила и тесты: `src/lib/advisor/proxyPolicy.ts`, `pnpm test`.
 
 Проверка без UI: ключ в `.env.local`, затем `node scripts/near-ai-e2ee-probe.mjs`.
 

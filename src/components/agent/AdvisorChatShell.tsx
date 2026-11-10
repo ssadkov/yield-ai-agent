@@ -16,6 +16,19 @@ import {
   type AdvisorSession,
   type UiMessage,
 } from "@/lib/advisor/runTurn";
+import type { AttestationSummary } from "@/lib/advisor/nearProxy";
+
+const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
+
+function attestationTitle(attestation: AttestationSummary, model: string | null): string {
+  const gpu = attestation.gpuEvidence === "verified" ? "NVIDIA GPU evidence verified" : "no GPU evidence provided";
+  return [
+    `${model ?? "Model"}: NEAR TEE attestation verified in this browser`,
+    `Intel TDX ${attestation.tcbStatus}, ${gpu}`,
+    `Signer ${attestation.signingAddress}, bound to a fresh nonce`,
+    "Messages are encrypted to the attested model key before they leave the browser.",
+  ].join("\n");
+}
 
 const SUGGESTIONS = [
   "Where should I put 200 USDC on Solana?",
@@ -63,6 +76,7 @@ export function AdvisorChatShell() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
+  const [attestation, setAttestation] = useState<AttestationSummary | null>(null);
   const sessionRef = useRef<AdvisorSession | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamId, setStreamId] = useState<string | null>(null);
@@ -83,10 +97,11 @@ export function AdvisorChatShell() {
 
   const ensureSession = async (currentMessages: UiMessage[]) => {
     if (sessionRef.current) return sessionRef.current;
-    setStatus("Checking attestation");
+    setStatus("Verifying TEE attestation");
     const session = await startAdvisorSession(historyFromUiMessages(currentMessages));
     sessionRef.current = session;
     setModel(session.attested.model);
+    setAttestation(session.attested.attestation);
     return session;
   };
 
@@ -97,6 +112,7 @@ export function AdvisorChatShell() {
     setMessages([]);
     setError(null);
     setModel(null);
+    setAttestation(null);
   };
 
   const send = async (raw: string) => {
@@ -143,6 +159,7 @@ export function AdvisorChatShell() {
       setError(message);
       setMessages((prev) => prev.filter((item) => !(item.id === nextStreamId && !item.content)));
       sessionRef.current = null;
+      setAttestation(null);
     } finally {
       setBusy(false);
       setStatus(null);
@@ -187,7 +204,7 @@ export function AdvisorChatShell() {
           <div className="min-w-0">
             <h2 className="truncate text-[15px] font-semibold tracking-tight">Yield AI</h2>
             <p className="truncate text-xs text-muted-foreground">
-              {busy ? thinkingLabel : model ? `${model} · private` : "Ask about yields & Safes"}
+              {busy ? thinkingLabel : model && attestation ? `${model} · TEE verified` : "Ask about yields & Safes"}
             </p>
           </div>
         </div>
@@ -212,9 +229,24 @@ export function AdvisorChatShell() {
               </svg>
             </button>
           ) : null}
-          <span className="hidden rounded-full border border-border/70 bg-surface px-2.5 py-1 font-mono text-[10px] text-muted-foreground sm:inline">
-            E2EE
-          </span>
+          {attestation ? (
+            <a
+              href={VERIFICATION_CENTER_URL}
+              target="_blank"
+              rel="noreferrer"
+              title={attestationTitle(attestation, model)}
+              className="hidden rounded-full border border-emerald-500/40 bg-surface px-2.5 py-1 font-mono text-[10px] text-emerald-600 hover:underline sm:inline dark:text-emerald-400"
+            >
+              E2EE · TEE ✓
+            </a>
+          ) : (
+            <span
+              title="Nothing is sent until the model's TEE attestation verifies in this browser."
+              className="hidden rounded-full border border-border/70 bg-surface px-2.5 py-1 font-mono text-[10px] text-muted-foreground sm:inline"
+            >
+              E2EE
+            </span>
+          )}
         </div>
       </div>
 
