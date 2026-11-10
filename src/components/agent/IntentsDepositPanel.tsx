@@ -88,10 +88,10 @@ const buttonClass =
 function loadPanelOpen(): boolean {
   try {
     const raw = window.localStorage.getItem(OPEN_KEY);
-    if (raw === null) return true;
+    if (raw === null) return false;
     return raw === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -106,7 +106,7 @@ export function IntentsDepositPanel({
   const owner = connected && publicKey ? publicKey.toBase58() : null;
   const [host, setHost] = useState<string | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [openReady, setOpenReady] = useState(false);
   useEffect(() => {
     setHost(window.location.host);
@@ -397,16 +397,13 @@ export function IntentsDepositPanel({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold tracking-tight">Deposit</h2>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] tracking-wide text-primary">
-              1-Click
-            </span>
+            <h2 className="text-sm font-semibold tracking-tight">Deposit 1-Click</h2>
             {activeDeposit ? (
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" aria-hidden />
             ) : null}
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {open ? "Mainnet USDC · 1–5 · refunds on fail" : collapsedSummary}
+            {open ? "Mainnet USDC · refunds on fail" : collapsedSummary}
           </p>
         </div>
         <span
