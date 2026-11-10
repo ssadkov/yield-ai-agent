@@ -53,10 +53,18 @@ export async function runAdvisorTurn(options: {
   userText: string;
   onAssistantDelta?: (text: string) => void;
   onStatus?: (status: string) => void;
-}): Promise<{ assistantText: string; plan: ProposedPlan | null; actionCard: ActionCard | null; model: string }> {
+}): Promise<{
+  assistantText: string;
+  plan: ProposedPlan | null;
+  actionCard: ActionCard | null;
+  model: string;
+  /** NEAR AI `inference-id` of every completion in this turn, for cost metering. */
+  inferenceIds: string[];
+}> {
   const { session, userText, onAssistantDelta, onStatus } = options;
   session.history.push({ role: "user", content: userText });
 
+  const inferenceIds: string[] = [];
   let plan: ProposedPlan | null = null;
   let actionCard: ActionCard | null = null;
   let finalText = "";
@@ -75,6 +83,7 @@ export async function runAdvisorTurn(options: {
         },
       },
     });
+    if (result.inferenceId) inferenceIds.push(result.inferenceId);
 
     if (result.toolCalls.length === 0) {
       finalText = result.text || finalText;
@@ -105,6 +114,7 @@ export async function runAdvisorTurn(options: {
               if (!actionCard) {
                 actionCard = { action: "deposit", amountUsdc: checked.plan.amountUsdc, note: checked.plan.rationale };
               }
+              actionCard = { ...actionCard, strategyId: checked.plan.strategyId };
             }
           }
         } catch {
@@ -136,6 +146,7 @@ export async function runAdvisorTurn(options: {
     plan,
     actionCard,
     model: session.attested.model,
+    inferenceIds,
   };
 }
 

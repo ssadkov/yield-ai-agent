@@ -75,6 +75,8 @@ export type ActionCard = {
   action: "deposit" | "withdraw";
   amountUsdc: number;
   note?: string;
+  /** Set when the card comes from a validated propose_plan; Kamino plans get a "put into Kamino" step. */
+  strategyId?: string;
 };
 
 export function validateProposePlan(args: unknown): { ok: true; plan: ProposedPlan } | { ok: false; error: string } {

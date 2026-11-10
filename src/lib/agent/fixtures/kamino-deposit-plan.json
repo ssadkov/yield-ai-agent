@@ -1,0 +1,25 @@
+{
+  "_note": "Live Solana Safe API kamino deposit plan for the pilot owner, 2026-11-11 (1 USDC from the Safe). Public data only.",
+  "status": "ready",
+  "amountRaw": "1000000",
+  "blockhash": "J94X7BtBRRmeqYwuH8oy5WQvWeFEegnqf4eJFbv1QGh",
+  "lastValidBlockHeight": 445870883,
+  "state": {
+    "owner": {
+      "type": "solana",
+      "address": "EP9fKzBpQzyZC2GYjjAF9tKEeUwi7dqNqMStmxdYu4h2"
+    },
+    "safe": "FuDCEZBgp8gxP3gafnHbUJRgGW63VAmtZwsjus1U5qSZ"
+  },
+  "steps": [
+    {
+      "id": "kamino_deposit",
+      "kind": "kamino_deposit",
+      "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAFCsbUgCsmfrCF4Af9u+RpRuNvwTygtYL9TR/88hPPrKLN3WObQof/wo4micv9JKtqSscJcNGg+efNSgEnm77ghlqHl8teBbYhKcFKkK/2/yqgfySZ4/WIxO9KmiAu1x7BkZa3cu1VW5GzsdjUOv73T8IVqOTWbeew3/lvVHtl6UNnZVquXV8elAP3owkAXk972yq3+e995QFX7nxJPNVN0XEDBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAA6Hmwad5Ll1tomAeeoAYsAh9AwkDmQ+Z2PHEmUcq89qc+MU0lnboVXMQ96+n0AKSxaGC1HW977uQ2nKIEc8POAE2Qrx24k57DX/lNlkDVfcwyeUuz4btm/TroSahNzblA/abOn2YZjdhw2KmG8wZ1xG+D4vUoNIeVL11QVj4+96BGP87Lq9OtcfgNy+xtaqm3MWi9cW+OQzN0cT/PS1CloEBQAFAoAaBgAGAgABGHdRFgRyuxeRECcAAAAAAAAAAAAAAAAAAAYVAAEHCAEKAg4PCwMEEBERCQgMDRITEO0IvLtzYzFVQEIPAAAAAAAGAgABGHdRFgRyuxeRiBOIEwAAAAAAAAAAAAAAAAFV/VhVdpEDfmrLUTGF586xssONQYqqvhKEhTWXHyzVSQQBBQkRBgIEBwMLEw==",
+      "transactionVersion": 0,
+      "requiredSigners": [
+        "EP9fKzBpQzyZC2GYjjAF9tKEeUwi7dqNqMStmxdYu4h2"
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import {
   type UiMessage,
 } from "@/lib/advisor/runTurn";
 import type { AttestationSummary } from "@/lib/advisor/nearProxy";
+import { AiPoolMeter, rememberInferenceIds } from "@/components/agent/AiPoolMeter";
 
 const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
 
@@ -142,6 +143,7 @@ export function AdvisorChatShell() {
         },
       });
       setModel(result.model);
+      rememberInferenceIds(result.inferenceIds);
       setMessages((prev) =>
         prev.map((message) =>
           message.id === nextStreamId
@@ -326,6 +328,8 @@ export function AdvisorChatShell() {
 
         <div ref={bottomRef} />
       </div>
+
+      <AiPoolMeter />
 
       <form
         className="px-3 pb-3 pt-1 sm:px-4 sm:pb-4"
