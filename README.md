@@ -23,7 +23,7 @@ The main Yield AI app proxies `/agent` and `/agent/:path*` to this deployment's 
 
 Opening the `*.vercel.app` URL directly is only a smoke test. The host warning on that URL is expected, and the Aptos address there is not the production one.
 
-`pnpm build` and `pnpm typecheck` are the checks.
+`pnpm build`, `pnpm typecheck` and `pnpm test` are the checks.
 
 Requests to `/api/...` are rewritten to `https://yieldai.app` when this app is the server (local dev, or opening this deployment on its own domain). On `yieldai.app` the main app serves `/api` itself. There is no API key in this repo. Owner Safes load from `GET /api/protocols/yield-ai/safes?owner=`. Token balances use `GET /api/public/v1/wallet/{address}/balance` and stay hidden when that route asks for a key.
 
@@ -59,6 +59,32 @@ Checked on 2026-11-07 with [`scripts/near-ai-e2ee-probe.mjs`](scripts/near-ai-e2
 encrypted streamed tool call and encrypted tool result all decrypt on `z-ai/glm-5.3-flash`. The chat itself is not
 built yet; the plan is in [docs/private-advisor.md](docs/private-advisor.md).
 
+## USDC yields API
+
+`GET /agent/api/usdc-yields` (`https://yieldai.app/agent/api/usdc-yields` in production) lists the USDC rates a Yield AI Safe can deposit into now. The private advisor reads it as its `get_usdc_yields` tool. Hackathon scope is Solana only.
+
+**Sources.** Both come from the Solana Safe API, each with a 15 s timeout.
+
+| Source | Rate | Status on 2026-11-10 |
+|---|---|---|
+| Kamino USDC kVault | Variable APY, with 24h/7d/30d/90d/180d/365d history | 7.6% |
+| Exponent PT-ONyc 10 Jan 2027 | Fixed APY if held to maturity; indicative quote for 100 USDC | 12.67%, 61 days left |
+
+Orca, Jupiter and leverage are not listed. Aptos agent strategies are off; `USDC_YIELDS_INCLUDE_APTOS=1` adds them from the main app's `/api/protocols/yield-ai/strategy-yields`, which returns 404 in production. Origins can be overridden with `SOLANA_SAFE_API_ORIGIN` and `YIELD_AI_API_ORIGIN`.
+
+**Response.** `rows` sorted by rate, `sources` with a status per source, and `notes`. Each row carries:
+- `id` (e.g. `solana:kamino_usdc`, `solana:exponent_onyc_10jan27`), chain, Safe and venue;
+- `rateType` (`variable` or `fixed_to_maturity`), `rateKind` (APY), `ratePct` and `history`;
+- for fixed rates: `maturity` (ISO time), `daysToMaturity` and `projectedAtMaturity` (`{ depositUsdc, receiveUsdc }`);
+- `agentExecutable`, which is false once a fixed rate has matured;
+- risk, caveats (fees, quote size, early exit), source and time.
+
+**For a model.** `?format=text` returns the same data as compact text, one line per row plus its risk and caveats. An unavailable source is spelled out as "rates are unknown; do not guess them".
+
+**Failures and caching.** A failed source stays in `sources` as `unavailable`, or as `stale` with its last good rows if those are at most 10 minutes old. The server caches responses for 60 s.
+
+`pnpm test` runs the unit tests (Node's built-in runner, Node 22.18 or later).
+
 ## What is new vs. baseline
 
 Hackathon rules Q-001, Q-002 and Q-005: code written before 2026-10-19, and the existing Yield AI product, are baseline. Only the NEAR integration built inside the window is the submission. This repository splits them in git history.
@@ -77,7 +103,7 @@ Hackathon rules Q-001, Q-002 and Q-005: code written before 2026-10-19, and the 
 | `src/lib/protocols/yield-ai/derivedSafeHost.ts` | Rule for where a derived wallet may create a Safe. Not used to create one here. |
 | `src/lib/utils/addressNormalization.ts` | Canonical Aptos addresses for the Safes query. |
 
-**Written for this hackathon** (from 2026-11-01): the `/agent` page, the Solana-first connect dialog, the native Aptos link, the host warning, the Safe and balance reads, and the NEAR Intents 1-Click deposit test (`src/lib/agent/oneClick.ts`, `solanaSafe.ts`, `aptosDerived.ts`, `src/components/agent/IntentsDepositPanel.tsx`). No Safe is created. The only transaction this page asks the wallet to sign is the deposit-test USDC transfer to a 1-Click deposit address.
+**Written for this hackathon** (from 2026-11-01): the `/agent` page, the Solana-first connect dialog, the native Aptos link, the host warning, the Safe and balance reads, the NEAR Intents 1-Click deposit test (`src/lib/agent/oneClick.ts`, `solanaSafe.ts`, `aptosDerived.ts`, `src/components/agent/IntentsDepositPanel.tsx`), and the USDC yields API (`src/lib/agent/usdcYields.ts`, `src/app/api/usdc-yields/route.ts`). No Safe is created. The only transaction this page asks the wallet to sign is the deposit-test USDC transfer to a 1-Click deposit address.
 
 ## Production check
 

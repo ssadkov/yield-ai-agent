@@ -132,7 +132,7 @@ PR #411 переносится почти как есть: `streamText` с `tool
 ### 5.5. Инструменты (выполняет браузер)
 | Инструмент | Источник | Статус 2026-11-09 |
 |---|---|---|
-| `get_strategy_yields` | `GET /api/protocols/yield-ai/strategy-yields` (основное приложение) | **404 на проде** — роут есть только в PR #411. Порядок: смержить защиту Echelon (PR ssadkov/yield-ai#456) → вынести роут доходностей отдельным PR → инструмент |
+| `get_usdc_yields` | `GET /agent/api/usdc-yields?format=text` (этот репозиторий; без `format` — JSON для UI). Строки: Kamino USDC (переменный APY, история), Exponent PT-ONyc (фиксированный APY до `maturity`, дни до погашения, выплата на 100 USDC). Описание полей — README, «USDC yields API» | работает 2026-11-10. На хакатон — **только Solana**: Aptos-стратегии выключены (`USDC_YIELDS_INCLUDE_APTOS=1` включает, но роут основного приложения на проде 404) |
 | `get_safe_positions` | `GET /api/protocols/yield-ai/safes?owner=` + чтение из сети | работает (200) |
 | `get_deposit_quote` | 1-Click `dry: true`, как в `src/lib/agent/oneClick.ts` | работает |
 | веб-поиск | встроенный `{"type": "web_context_search"}` | работает в E2EE; **только для новостей и инцидентов, не для APR и цен** |
@@ -186,7 +186,7 @@ PR #411 переносится почти как есть: `streamText` с `tool
 | `src/lib/chat/productKnowledge.ts` | переписать (5.4) |
 | `src/lib/chat/portfolioContext.ts` | брать форматирование, сборку — из данных этого приложения |
 | `src/app/api/chat/route.ts` | не нужен: вместо него слепой прокси (5.1) |
-| `src/lib/protocols/yield-ai/strategyYields.ts` | не копировать — вызывать роут основного приложения |
+| `src/lib/protocols/yield-ai/strategyYields.ts` | не нужен: доходности даёт `/agent/api/usdc-yields` (5.5) |
 
 ## 9. Открытые вопросы
 
