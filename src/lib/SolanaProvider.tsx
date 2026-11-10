@@ -7,14 +7,13 @@
  */
 
 import { WalletProvider as SolanaWalletProvider, ConnectionProvider } from "@solana/wallet-adapter-react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { getPublicSolanaRpcEndpoint, PUBLIC_SOLANA_WS_ENDPOINT } from "@/lib/solanaRpcEndpoint";
 
 const WALLET_NAME_KEY = "walletName";
 
 /** Normalize walletName to valid JSON so the adapter's JSON.parse() does not throw. */
 function normalizeWalletNameStorage() {
-  if (typeof window === "undefined") return;
   try {
     const raw = window.localStorage.getItem(WALLET_NAME_KEY);
     if (raw == null || raw === "") return;
@@ -28,7 +27,9 @@ function normalizeWalletNameStorage() {
 }
 
 export function SolanaProvider({ children }: { children: ReactNode }) {
-  normalizeWalletNameStorage();
+  useEffect(() => {
+    normalizeWalletNameStorage();
+  }, []);
 
   const endpoint = useMemo(() => getPublicSolanaRpcEndpoint(), []);
   const connectionConfig = useMemo(

@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { CANONICAL_DERIVED_SAFE_HOST } from "@/lib/protocols/yield-ai/derivedSafeHost";
 import { useAgentWallets } from "@/lib/agent/useAgentWallets";
-import { SessionPanel } from "@/components/agent/SessionPanel";
+import { AgentHeader } from "@/components/agent/AgentHeader";
+import { AdvisorChatShell } from "@/components/agent/AdvisorChatShell";
 import { WalletDialog } from "@/components/agent/WalletDialog";
-import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
+import { WalletSidePanel } from "@/components/agent/WalletSidePanel";
+
+type MobilePane = "chat" | "wallet";
 
 function usePageHost(): string | null {
   const [host, setHost] = useState<string | null>(null);
@@ -19,98 +22,149 @@ export function AgentHome() {
   const session = useAgentWallets();
   const host = usePageHost();
   const [disconnecting, setDisconnecting] = useState(false);
+  const [mobilePane, setMobilePane] = useState<MobilePane>("chat");
   const hostKnown = host !== null;
   const onProduction = host?.toLowerCase() === CANONICAL_DERIVED_SAFE_HOST;
   const nativeOnOtherHost = Boolean(session.aptosAddress) && session.derivedChain == null;
   const warnAboutHost = hostKnown && !onProduction && !nativeOnOtherHost;
+  const displayAddress = session.solanaAddress ?? session.aptosAddress;
 
   const closeDialog = session.closeDialog;
+  /** Desktop left rail: only when there is session content or a host warning. */
+  const showDesktopLeft = Boolean(
+    session.connected || warnAboutHost || session.error || session.pendingId
+  );
+  const showSkeleton = Boolean(session.pendingId && !session.connected);
+  const showMobileWallet = mobilePane === "wallet";
+  const showMobileChat = mobilePane === "chat";
+
+  const walletPanel = (
+    <WalletSidePanel
+      connected={session.connected}
+      pending={session.pendingId !== null}
+      warnAboutHost={warnAboutHost}
+      error={session.error}
+      showSkeleton={showSkeleton}
+      solanaAddress={session.solanaAddress}
+      aptosAddress={session.aptosAddress}
+      aptosKind={session.aptosKind}
+      solanaWalletName={session.solanaWalletName}
+      aptosIsDerived={session.derivedChain === "solana"}
+      onConnectSolana={() => session.setDialog("solana")}
+      onConnectAptos={() => session.setDialog("aptos")}
+    />
+  );
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-12 sm:py-16">
-      <header>
-        <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">Yield AI</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Agent</h1>
-        <p className="mt-3 text-base leading-7 text-muted-foreground">
-          Connect a Solana wallet. The same adapter as on yieldai.app derives an Aptos account for this site.
-        </p>
-      </header>
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden">
+      <AgentHeader
+        connected={session.connected}
+        pending={session.pendingId !== null}
+        disconnecting={disconnecting}
+        displayAddress={displayAddress}
+        walletIcon={session.walletIcon}
+        solanaAddress={session.solanaAddress}
+        aptosAddress={session.aptosAddress}
+        aptosKind={session.aptosKind}
+        solanaWalletName={session.solanaWalletName}
+        onConnectSolana={() => session.setDialog("solana")}
+        onConnectAptos={() => session.setDialog("aptos")}
+        onDisconnect={() => {
+          setDisconnecting(true);
+          void session.disconnect().finally(() => setDisconnecting(false));
+        }}
+      />
 
-      <section
-        aria-label="Site host"
-        className={
-          warnAboutHost
-            ? "rounded-2xl border border-warning-border bg-warning px-5 py-4 text-warning-foreground"
-            : "rounded-2xl border border-border bg-card px-5 py-4"
-        }
+      <main className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col px-3 pt-3 sm:px-4 lg:pb-4 lg:pt-4">
+        <div
+          className={[
+            "flex min-h-0 flex-1 flex-col gap-3 pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:grid lg:gap-4 lg:pb-0",
+            showDesktopLeft ? "lg:grid-cols-[300px_minmax(0,1fr)]" : "lg:grid-cols-1",
+          ].join(" ")}
+        >
+          <aside
+            className={[
+              "min-h-0 overflow-y-auto overscroll-contain scrollbar-hide",
+              showMobileWallet ? "block flex-1" : "hidden",
+              showDesktopLeft ? "lg:block lg:flex-none lg:pr-1" : "lg:hidden",
+            ].join(" ")}
+          >
+            <div className="mb-3 lg:hidden">
+              <p className="font-mono text-[10px] tracking-[0.14em] text-primary/80 uppercase">
+                &gt;&gt; wallet desk
+              </p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">Wallet & deposit</h2>
+            </div>
+            {walletPanel}
+          </aside>
+
+          <div
+            className={[
+              "min-h-0",
+              showMobileChat ? "flex flex-1 flex-col" : "hidden",
+              "lg:flex lg:min-h-0",
+            ].join(" ")}
+          >
+            <AdvisorChatShell />
+          </div>
+        </div>
+      </main>
+
+      <nav
+        aria-label="Agent sections"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-3 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
       >
-        <p className="text-sm">
-          Host{" "}
-          <span className="font-mono">{host ?? "…"}</span>
-        </p>
-        {host && !onProduction && !nativeOnOtherHost ? (
-          <p role="alert" className="mt-2 text-sm leading-6">
-            The Aptos address on this host is different from production. Do not create a Safe here.
-          </p>
-        ) : null}
-        {host && !onProduction && nativeOnOtherHost ? (
-          <p className="mt-2 text-sm leading-6">
-            This native Aptos address is the same on every host. This page still does not create a Safe.
-          </p>
-        ) : null}
-        {onProduction ? (
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Production host. A derived Aptos address here matches yieldai.app.
-          </p>
-        ) : null}
-      </section>
-
-      {session.error ? (
-        <p role="alert" className="rounded-2xl border border-border bg-card px-5 py-4 text-sm text-danger">
-          {session.error}
-        </p>
-      ) : null}
-
-      {session.connected ? (
-        <SessionPanel
-          aptosAddress={session.aptosAddress}
-          solanaAddress={session.solanaAddress}
-          aptosKind={session.aptosKind}
-          solanaWalletName={session.solanaWalletName}
-          derived={session.derivedChain != null || Boolean(session.solanaAddress)}
-          disconnecting={disconnecting}
-          onDisconnect={() => {
-            setDisconnecting(true);
-            void session.disconnect().finally(() => setDisconnecting(false));
-          }}
-        />
-      ) : (
-        <section className="rounded-2xl border border-border bg-card px-5 py-5">
-          <button
-            type="button"
-            disabled={session.pendingId !== null}
-            onClick={() => session.setDialog("solana")}
-            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-primary px-5 text-base font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
-          >
-            {session.pendingId ? "Connecting…" : "Connect Solana wallet"}
-          </button>
-          <button
-            type="button"
-            disabled={session.pendingId !== null}
-            onClick={() => session.setDialog("aptos")}
-            className="mt-3 inline-flex h-11 w-full items-center justify-center text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
-          >
-            I have an Aptos wallet
-          </button>
-        </section>
-      )}
-
-      {session.connected && session.solanaAddress ? (
-        <IntentsDepositPanel
-          aptosAddress={session.aptosAddress}
-          aptosIsDerived={session.derivedChain === "solana"}
-        />
-      ) : null}
+        <div className="mx-auto grid max-w-lg grid-cols-2 gap-1 py-2">
+          {(
+            [
+              {
+                id: "chat" as const,
+                label: "Chat",
+                icon: (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
+                    <path
+                      d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"
+                      fill="currentColor"
+                      opacity="0.95"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                id: "wallet" as const,
+                label: "Wallet",
+                icon: (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
+                    <path
+                      d="M4 8.5h16v9.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Zm2.5-4h11L19 8.5H5l1.5-4Z"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M12 12.5v3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                ),
+              },
+            ] as const
+          ).map((item) => {
+            const active = mobilePane === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setMobilePane(item.id)}
+                className={[
+                  "inline-flex h-12 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                ].join(" ")}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       <WalletDialog
         open={session.dialog === "solana"}
@@ -134,6 +188,6 @@ export function AgentHome() {
           void session.connectAptosWallet(id);
         }}
       />
-    </main>
+    </div>
   );
 }
