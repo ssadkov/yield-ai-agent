@@ -20,7 +20,7 @@ import {
 const SUGGESTIONS = [
   "Where should I put 200 USDC on Solana?",
   "What’s the best USDC yield right now?",
-  "Propose a plan for 3 USDC into Kamino",
+  "Explain Kamino vs Exponent for USDC",
 ];
 
 function ThinkingChip({ label }: { label: string }) {
