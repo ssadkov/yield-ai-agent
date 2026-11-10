@@ -1,17 +1,20 @@
 /**
  * USDC yields across the destinations a Yield AI Safe can deposit into now.
- * Server-side only: it calls the Solana Safe API and the main app's API.
+ * Server-side only: it calls the Solana Safe API (and, when enabled, the main app's API).
  *
  * This is the data the private advisor reads. Only executable destinations are listed:
  * Orca, Jupiter and leverage on Solana are not (not deployed, or not agent routes).
  * A source that fails stays in the response as `unavailable` instead of disappearing.
+ *
+ * Hackathon scope (2026-11-10): Solana only. The Aptos strategies source is off unless
+ * `includeAptos` is set (env USDC_YIELDS_INCLUDE_APTOS=1).
  */
 
 export type Chain = "solana" | "aptos";
 export type RateType = "variable" | "fixed_to_maturity";
 
 export type UsdcYield = {
-  /** Stable id, e.g. "solana:kamino_usdc" or "aptos:stablecoin_compound:usdc". */
+  /** Stable id, e.g. "solana:kamino_usdc" or "solana:exponent_onyc_10jan27". */
   id: string;
   /** Which source produced the row (set by loadUsdcYields). */
   sourceId?: SourceStatus["id"];
@@ -29,11 +32,15 @@ export type UsdcYield = {
   baseRatePct: number | null;
   boostPct: number | null;
   leverage: number | null;
-  /** ISO date for fixed-to-maturity rows. */
+  /** ISO time the fixed rate matures (fixed_to_maturity rows), else null. */
   maturity: string | null;
+  /** Whole days left until `maturity` at response time; 0 once matured. */
+  daysToMaturity: number | null;
+  /** What the source's reference deposit is projected to return at maturity (USDC). */
+  projectedAtMaturity: { depositUsdc: number; receiveUsdc: number } | null;
   /** Average APY over past windows when the source publishes it, in percent. */
-  history: { "7d"?: number; "30d"?: number; "90d"?: number; "365d"?: number } | null;
-  /** The Safe's agent can open this position within the owner's limits. */
+  history: { "24h"?: number; "7d"?: number; "30d"?: number; "90d"?: number; "180d"?: number; "365d"?: number } | null;
+  /** The Safe's agent can open this position within the owner's limits. False once a fixed rate has matured. */
   agentExecutable: boolean;
   risk: string;
   caveats: string[];
@@ -64,6 +71,8 @@ const YIELD_AI_API_ORIGIN = "https://yieldai.app";
 const FETCH_TIMEOUT_MS = 15_000;
 /** A failed source may reuse its last good rows this long, marked `stale`. */
 export const STALE_MAX_MS = 10 * 60_000;
+const DAY_MS = 86_400_000;
+const HISTORY_KEYS = ["24h", "7d", "30d", "90d", "180d", "365d"] as const;
 
 function num(value: unknown): number | null {
   const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
@@ -93,13 +102,13 @@ export function normalizeKamino(body: unknown): UsdcYield[] {
   if (!b || b.status !== "available") throw new Error(`Kamino yield status ${String(b?.status ?? "missing")}`);
   const hist = (b.historicalApyRatio ?? {}) as Record<string, unknown>;
   const history: NonNullable<UsdcYield["history"]> = {};
-  for (const key of ["7d", "30d", "90d", "365d"] as const) {
+  for (const key of HISTORY_KEYS) {
     const v = pct(hist[key]);
     if (v !== null) history[key] = v;
   }
   return [
     {
-      id: "solana:kamino_usdc",
+      id: `solana:${String(b.strategy ?? "kamino_usdc")}`,
       chain: "solana",
       safe: "solana-safe",
       venue: String(b.name ?? "Kamino USDC"),
@@ -111,6 +120,8 @@ export function normalizeKamino(body: unknown): UsdcYield[] {
       boostPct: null,
       leverage: null,
       maturity: null,
+      daysToMaturity: null,
+      projectedAtMaturity: null,
       history: Object.keys(history).length ? history : null,
       agentExecutable: true,
       risk: "Lending and private-credit risk of the Kamino vault; smart-contract risk. Withdrawals depend on vault liquidity.",
@@ -129,8 +140,26 @@ export function normalizeKamino(body: unknown): UsdcYield[] {
 export function normalizeExponent(body: unknown, now = Date.now()): UsdcYield[] {
   const b = body as Record<string, unknown> | null;
   if (!b || b.status !== "available") throw new Error(`Exponent yield status ${String(b?.status ?? "missing")}`);
-  const maturity = typeof b.maturity === "string" ? b.maturity : null;
-  const daysLeft = maturity ? Math.max(0, Math.floor((Date.parse(maturity) - now) / 86_400_000)) : null;
+  const maturityMs = typeof b.maturity === "string" ? Date.parse(b.maturity) : NaN;
+  const maturity = Number.isFinite(maturityMs) ? new Date(maturityMs).toISOString() : null;
+  const matured = maturity !== null && maturityMs <= now;
+  const daysToMaturity = maturity !== null ? Math.max(0, Math.floor((maturityMs - now) / DAY_MS)) : null;
+  const deposit = num(b.referenceAmountUsdc);
+  const receive = num(b.projectedNetUsdc);
+  const feeBps = num(b.displayProfitFeeBps);
+  const pilotFeeBps = num(b.pilotProfitFeeBps);
+  const caveats = [
+    `Indicative quote for ${deposit ?? 100} USDC at current NAV and DEX liquidity; a larger amount gets a worse price.`,
+    maturity === null
+      ? "Maturity unknown."
+      : matured
+        ? "Matured: no new purchases."
+        : `Fixed rate only if held to ${maturity.slice(0, 10)} (${daysToMaturity} days); an early exit sells PT at market.`,
+    feeBps !== null
+      ? `Includes the projected ${feeBps / 100}% Yield AI profit fee${pilotFeeBps === 0 ? "; the pilot fee is 0%" : ""}.`
+      : "Yield AI profit fee: see source.",
+    "Network fees and rent not included.",
+  ];
   return [
     {
       id: `solana:${String(b.strategy ?? "exponent_pt")}`,
@@ -145,15 +174,12 @@ export function normalizeExponent(body: unknown, now = Date.now()): UsdcYield[] 
       boostPct: null,
       leverage: null,
       maturity,
+      daysToMaturity,
+      projectedAtMaturity: deposit !== null && receive !== null ? { depositUsdc: deposit, receiveUsdc: receive } : null,
       history: null,
-      agentExecutable: true,
+      agentExecutable: maturity !== null && !matured,
       risk: "Fixed rate only if held to maturity; early exit sells PT at market. ONyc (OnRe) credit and NAV risk; Orca and Exponent liquidity risk.",
-      caveats: [
-        `Indicative quote for ${String(b.referenceAmountUsdc ?? "100")} USDC at current NAV and DEX liquidity.`,
-        daysLeft !== null ? `Matures in ${daysLeft} days; no new purchases after maturity.` : "Maturity unknown.",
-        "Includes the projected future Yield AI profit fee; the pilot fee is 0%.",
-        "Network fees and rent not included.",
-      ],
+      caveats,
       source: String(b.source ?? "Exponent live quote"),
       sourceUpdatedAt: iso(b.fetchedAt),
     },
@@ -171,7 +197,7 @@ type AptosVariant = {
 type AptosStrategy = { id?: unknown; label?: unknown; risk?: unknown; variants?: unknown };
 
 /**
- * GET {yieldai}/api/protocols/yield-ai/strategy-yields
+ * GET {yieldai}/api/protocols/yield-ai/strategy-yields (off by default, see the file header).
  * Shape from ssadkov/yield-ai#411: { success, data: { updatedAt, boost, strategies[] } }, APR in percent.
  */
 export function normalizeAptosStrategies(body: unknown): UsdcYield[] {
@@ -204,6 +230,8 @@ export function normalizeAptosStrategies(body: unknown): UsdcYield[] {
         boostPct: boost,
         leverage: num(v.leverage),
         maturity: null,
+        daysToMaturity: null,
+        projectedAtMaturity: null,
         history: null,
         agentExecutable: true,
         risk: String(s.risk ?? ""),
@@ -228,19 +256,33 @@ async function getJson(url: string): Promise<unknown> {
   return response.json();
 }
 
+export type UsdcYieldsEnv = {
+  solanaSafeApiOrigin?: string;
+  yieldAiApiOrigin?: string;
+  /** Add the Aptos strategies source (off for the hackathon). */
+  includeAptos?: boolean;
+};
+
 export async function loadUsdcYields(
-  env: { solanaSafeApiOrigin?: string; yieldAiApiOrigin?: string } = {},
+  env: UsdcYieldsEnv = {},
   previous: UsdcYieldsResponse | null = null,
-  now = Date.now()
+  now = Date.now(),
+  fetchJson: (url: string) => Promise<unknown> = getJson
 ): Promise<UsdcYieldsResponse> {
   const solana = env.solanaSafeApiOrigin || SOLANA_SAFE_API_ORIGIN;
   const aptos = env.yieldAiApiOrigin || YIELD_AI_API_ORIGIN;
   const plan: { id: SourceStatus["id"]; url: string; normalize: (body: unknown) => UsdcYield[] }[] = [
     { id: "solana-kamino", url: `${solana}/api/mobile/v1/protocols/kamino/yield?cluster=mainnet`, normalize: normalizeKamino },
-    { id: "solana-exponent", url: `${solana}/api/mobile/v1/protocols/exponent/yield?cluster=mainnet`, normalize: (b) => normalizeExponent(b) },
-    { id: "aptos-strategies", url: `${aptos}/api/protocols/yield-ai/strategy-yields`, normalize: normalizeAptosStrategies },
+    {
+      id: "solana-exponent",
+      url: `${solana}/api/mobile/v1/protocols/exponent/yield?cluster=mainnet`,
+      normalize: (b) => normalizeExponent(b, now),
+    },
   ];
-  const results = await Promise.allSettled(plan.map(async (p) => p.normalize(await getJson(p.url))));
+  if (env.includeAptos) {
+    plan.push({ id: "aptos-strategies", url: `${aptos}/api/protocols/yield-ai/strategy-yields`, normalize: normalizeAptosStrategies });
+  }
+  const results = await Promise.allSettled(plan.map(async (p) => p.normalize(await fetchJson(p.url))));
   const rows: UsdcYield[] = [];
   const fetchedNow = new Date(now).toISOString();
   const sources: SourceStatus[] = results.map((r, i) => {
@@ -253,20 +295,66 @@ export async function loadUsdcYields(
     const last = previous?.sources.find((src) => src.id === id && src.status !== "unavailable");
     const lastAt = last?.fetchedAt ? Date.parse(last.fetchedAt) : NaN;
     if (previous && last && now - lastAt <= STALE_MAX_MS) {
-      const reused = previous.rows.filter((row) => row.sourceId === id);
+      const reused = previous.rows.filter((row) => row.sourceId === id).map((row) => withMaturityAt(row, now));
       rows.push(...reused);
       return { id, url, status: "stale", error, rows: reused.length, fetchedAt: last.fetchedAt };
     }
     return { id, url, status: "unavailable", error, rows: 0, fetchedAt: null };
   });
   rows.sort((a, b) => (b.ratePct ?? -Infinity) - (a.ratePct ?? -Infinity));
+  const notes = [
+    "Rates are not guaranteed. A fixed_to_maturity rate holds only to `maturity`; variable rates change daily.",
+    "Only destinations a Yield AI Safe can deposit into now are listed.",
+  ];
+  if (rows.some((r) => r.rateKind === "APR") && rows.some((r) => r.rateKind === "APY")) {
+    notes.push("Solana rows are APY, Aptos rows are APR: compare with care.");
+  }
+  return { updatedAt: fetchedNow, rows, sources, notes };
+}
+
+/** Recompute days left (and executability) for a reused row. */
+function withMaturityAt(row: UsdcYield, now: number): UsdcYield {
+  if (!row.maturity) return row;
+  const ms = Date.parse(row.maturity);
   return {
-    updatedAt: fetchedNow,
-    rows,
-    sources,
-    notes: [
-      "Rates are not guaranteed. Solana rows are APY, Aptos rows are APR: compare with care.",
-      "Only destinations a Yield AI Safe can deposit into now are listed.",
-    ],
+    ...row,
+    daysToMaturity: Math.max(0, Math.floor((ms - now) / DAY_MS)),
+    agentExecutable: row.agentExecutable && ms > now,
   };
+}
+
+// ------------------------------------------------------------------ text for the model
+
+/**
+ * Compact plain text of the response for a tool result: one line per row plus source status.
+ * Cheaper and less ambiguous for the model than the raw JSON.
+ */
+export function formatUsdcYieldsForPrompt(res: UsdcYieldsResponse): string {
+  const lines = [`USDC yields for Yield AI Safes, as of ${res.updatedAt}:`];
+  for (const r of res.rows) {
+    const rate = r.ratePct === null ? "rate n/a" : `${r.ratePct}% ${r.rateKind}`;
+    const kind =
+      r.rateType === "fixed_to_maturity"
+        ? `fixed to ${r.maturity?.slice(0, 10) ?? "unknown"} (${r.daysToMaturity ?? "?"} days left)`
+        : "variable";
+    const parts = [`- ${r.venue} [${r.id}]: ${rate}, ${kind}`];
+    if (r.history?.["30d"] !== undefined) parts.push(`30d avg ${r.history["30d"]}%`);
+    if (r.projectedAtMaturity) {
+      parts.push(`${r.projectedAtMaturity.depositUsdc} USDC -> ${r.projectedAtMaturity.receiveUsdc} USDC at maturity`);
+    }
+    parts.push(r.agentExecutable ? "agent can deposit" : "not executable now");
+    lines.push(`${parts.join("; ")}.`);
+    lines.push(`  Risk: ${r.risk}`);
+    lines.push(`  Caveats: ${r.caveats.join(" ")}`);
+  }
+  const degraded = res.sources.filter((s) => s.status !== "ok");
+  for (const s of degraded) {
+    lines.push(
+      s.status === "stale"
+        ? `Source ${s.id} is stale (last good ${s.fetchedAt}): ${s.error ?? ""}`
+        : `Source ${s.id} is unavailable: ${s.error ?? ""}. Its rates are unknown; do not guess them.`
+    );
+  }
+  lines.push(...res.notes.map((n) => `Note: ${n}`));
+  return lines.join("\n");
 }

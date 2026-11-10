@@ -23,7 +23,7 @@ The main Yield AI app proxies `/agent` and `/agent/:path*` to this deployment's 
 
 Opening the `*.vercel.app` URL directly is only a smoke test. The host warning on that URL is expected, and the Aptos address there is not the production one.
 
-`pnpm build` and `pnpm typecheck` are the checks.
+`pnpm build`, `pnpm typecheck` and `pnpm test` are the checks.
 
 Requests to `/api/...` are rewritten to `https://yieldai.app` when this app is the server (local dev, or opening this deployment on its own domain). On `yieldai.app` the main app serves `/api` itself. There is no API key in this repo. Owner Safes load from `GET /api/protocols/yield-ai/safes?owner=`. Token balances use `GET /api/public/v1/wallet/{address}/balance` and stay hidden when that route asks for a key.
 
@@ -61,25 +61,29 @@ built yet; the plan is in [docs/private-advisor.md](docs/private-advisor.md).
 
 ## USDC yields API
 
-`GET /agent/api/usdc-yields` (`https://yieldai.app/agent/api/usdc-yields` in production) lists the USDC rates a Yield AI Safe can deposit into now. This is what the private advisor reads.
+`GET /agent/api/usdc-yields` (`https://yieldai.app/agent/api/usdc-yields` in production) lists the USDC rates a Yield AI Safe can deposit into now. The private advisor reads it as its `get_usdc_yields` tool. Hackathon scope is Solana only.
 
-**Sources** (each with a 15 s timeout):
+**Sources.** Both come from the Solana Safe API, each with a 15 s timeout.
 
-| Source | Rate | Status on 2026-11-04 |
+| Source | Rate | Status on 2026-11-10 |
 |---|---|---|
-| Kamino USDC kVault, Solana Safe (Solana Safe API) | Variable APY, with 7/30/90/365-day history | Works |
-| Exponent PT-ONyc, Solana Safe (Solana Safe API) | Fixed APY to maturity, indicative | Works |
-| Aptos agent strategies (`/api/protocols/yield-ai/strategy-yields` in the main app) | APR including the Boost campaign | `unavailable`: the route is not in the main app's production yet |
+| Kamino USDC kVault | Variable APY, with 24h/7d/30d/90d/180d/365d history | 7.6% |
+| Exponent PT-ONyc 10 Jan 2027 | Fixed APY if held to maturity; indicative quote for 100 USDC | 12.67%, 61 days left |
 
-Orca, Jupiter and leverage are not listed. Origins can be overridden with `SOLANA_SAFE_API_ORIGIN` and `YIELD_AI_API_ORIGIN`.
+Orca, Jupiter and leverage are not listed. Aptos agent strategies are off; `USDC_YIELDS_INCLUDE_APTOS=1` adds them from the main app's `/api/protocols/yield-ai/strategy-yields`, which returns 404 in production. Origins can be overridden with `SOLANA_SAFE_API_ORIGIN` and `YIELD_AI_API_ORIGIN`.
 
 **Response.** `rows` sorted by rate, `sources` with a status per source, and `notes`. Each row carries:
-- chain, Safe and venue;
-- deposit asset, rate type and kind (APY or APR), headline rate, base rate, Boost, leverage, maturity, history;
-- whether the agent can execute it;
-- risk, caveats, source and time.
+- `id` (e.g. `solana:kamino_usdc`, `solana:exponent_onyc_10jan27`), chain, Safe and venue;
+- `rateType` (`variable` or `fixed_to_maturity`), `rateKind` (APY), `ratePct` and `history`;
+- for fixed rates: `maturity` (ISO time), `daysToMaturity` and `projectedAtMaturity` (`{ depositUsdc, receiveUsdc }`);
+- `agentExecutable`, which is false once a fixed rate has matured;
+- risk, caveats (fees, quote size, early exit), source and time.
+
+**For a model.** `?format=text` returns the same data as compact text, one line per row plus its risk and caveats. An unavailable source is spelled out as "rates are unknown; do not guess them".
 
 **Failures and caching.** A failed source stays in `sources` as `unavailable`, or as `stale` with its last good rows if those are at most 10 minutes old. The server caches responses for 60 s.
+
+`pnpm test` runs the unit tests (Node's built-in runner, Node 22.18 or later).
 
 ## What is new vs. baseline
 

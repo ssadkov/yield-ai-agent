@@ -163,9 +163,10 @@ Next.js-приложение (App Router, TypeScript, Tailwind v4), `basePath: '
   `src/components/chat/ChatMarkdown.tsx`, `src/app/api/chat/route.ts`, форматирование из `portfolioContext.ts`.
   Остаётся в yield-ai: `GptChatPanel.tsx`, сборка контекста из сторов, Boost-контекст.
   `productKnowledge.ts` — переписать под путь «Phantom → derived Safe».
-- Доходности берём с `/api/protocols/yield-ai/strategy-yields` основного приложения, а не копируем `strategyYields.ts`.
+- Доходности — `GET /agent/api/usdc-yields` этого приложения (Kamino USDC и Exponent PT, только Solana — решено 2026-11-10).
+  `strategyYields.ts` и роут `strategy-yields` основного приложения на хакатон не нужны.
 - Нет ещё: подключения NEAR AI (`https://cloud-api.near.ai/v1`), аттестации и проверки подписи ответа,
-  инструмента «план под подпись», доходностей Solana/Kamino.
+  инструмента «план под подпись».
 - В private-режиме — без молчаливого fallback на OpenAI; в интерфейсе честно: наш сервер видит текст запроса,
   аттестация покрывает только модель. Нужен общий потолок расходов (кредиты NEAR AI — $10).
 
@@ -224,9 +225,9 @@ Next.js-приложение (App Router, TypeScript, Tailwind v4), `basePath: '
 2. **Портфель** — короткий снимок в начале сессии (~1 тыс. токенов): сейфы, позиции, суммы в USD, время снимка. Собирает
    браузер из публичных данных; формат — по образцу `formatPortfolioContextForPrompt` из PR #411. Сырой JSON модели не давать.
 3. **Свежие данные — через инструменты** (вызов приходит зашифрованным, выполняет браузер, результат уходит зашифрованным):
-   - `get_strategy_yields` → `GET /api/protocols/yield-ai/strategy-yields`. **На 2026-11-07 на проде 404**: роут есть только
-     в неслитом PR #411. Он читает `/api/protocols/echelon/v2/pools`, который сейчас защищают от данных взломанного сайта
-     Echelon (отдельный PR из облачной сессии). Порядок: защита Echelon → роут доходностей → инструмент.
+   - `get_usdc_yields` → `GET /agent/api/usdc-yields?format=text` (этот репозиторий). С 2026-11-10 — только Solana:
+     Kamino USDC и Exponent PT с датой погашения. Роут `strategy-yields` основного приложения (PR #411, на проде 404) для
+     хакатона не нужен; Aptos-источник включается `USDC_YIELDS_INCLUDE_APTOS=1`.
    - `get_safe_positions` → `GET /api/protocols/yield-ai/safes?owner=` (на проде 200) и чтение из сети.
    - `get_deposit_quote` → котировка 1-Click (`dry: true`), как в панели депозита.
    - Балансы — читать из сети напрямую: публичный wallet API без ключа отвечает 401, ключ в браузер не класть.
