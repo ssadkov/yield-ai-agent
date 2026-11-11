@@ -58,6 +58,6 @@ export function trialState(input: { guestRequestsToday: number; allGuestsUsdToda
 }
 
 export const TRIAL_USED_UP =
-  "You've used today's free tries. Connect a Solana wallet to keep chatting: $0.05 of private AI free every month.";
+  "You've used today's free tries. Connect and sign once with a Solana wallet to keep chatting: $0.05 of private AI free every month.";
 export const TRIAL_CAP_REACHED =
   "Free tries without a wallet are used up for today. Connect a Solana wallet to keep chatting.";

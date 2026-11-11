@@ -92,10 +92,7 @@ export function AgentHome() {
             ].join(" ")}
           >
             <div className="mb-3 lg:hidden">
-              <p className="font-mono text-[10px] tracking-[0.14em] text-primary/80 uppercase">
-                &gt;&gt; wallet desk
-              </p>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight">Wallet & deposit</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Earn</h2>
             </div>
             {walletPanel}
           </aside>
@@ -134,7 +131,7 @@ export function AgentHome() {
               },
               {
                 id: "wallet" as const,
-                label: "Wallet",
+                label: "Earn",
                 icon: (
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
                     <path

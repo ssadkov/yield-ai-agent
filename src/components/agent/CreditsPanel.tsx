@@ -163,19 +163,36 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
           Connect a Solana wallet for ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
         </p>
       ) : !signedInAs || !state.signedIn ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-muted-foreground">
-            Sign once with your wallet to chat. ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
-          </span>
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void doSignIn()}
-            className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[12.5px] font-medium text-primary-foreground disabled:opacity-40"
-          >
-            {busy === "signin" ? "Sign…" : "Sign in"}
-          </button>
-        </div>
+        // Signing is only asked for when it buys something: the trial covers the first requests.
+        state.trial && state.trial.requestsLeft > 0 ? (
+          <p className="text-muted-foreground">
+            {state.trial.requestsLeft} free requests left today.{" "}
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void doSignIn()}
+              className="font-medium text-foreground underline underline-offset-2 disabled:opacity-40"
+            >
+              {busy === "signin" ? "Sign…" : "Sign once"}
+            </button>{" "}
+            for ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI every month, Open chat and top-ups.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-muted-foreground">
+              {state.trial ? "Today's free tries are used. " : ""}Sign once with your wallet to keep chatting: $
+              {(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
+            </span>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void doSignIn()}
+              className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[12.5px] font-medium text-primary-foreground disabled:opacity-40"
+            >
+              {busy === "signin" ? "Sign…" : "Sign once"}
+            </button>
+          </div>
+        )
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
