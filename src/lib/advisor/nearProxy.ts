@@ -58,14 +58,26 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 /**
- * Verify NEAR attestation for the model the user selected (or the default).
- * `@nearai/inference-sdk` checks every candidate: Intel TDX quote and TCB status, report data
+ * Use the first of `candidates` whose NEAR attestation verifies, with the E2EE key bound to it.
+ * `@nearai/inference-sdk` checks every attestation: Intel TDX quote and TCB status, report data
  * binding our fresh nonce and the signer, RTMR3 event log, MRCONFIGID, and NVIDIA GPU evidence
- * when present (collateral via NEAR AI's CORS proxies). Every candidate must pass and they must
- * agree on the key; otherwise we never send anything to this model.
+ * when present (collateral via NEAR AI's CORS proxies). Every attestation must pass and they must
+ * agree on the key; otherwise we try the next candidate and never send anything to this one.
  * The SDK is loaded on first use so it stays out of the page's initial bundle.
  */
-export async function pickAttestedModel(preferred: AdvisorModel): Promise<AttestedModel> {
+export async function pickAttestedModel(candidates: readonly AdvisorModel[]): Promise<AttestedModel> {
+  let lastError = "No model to verify";
+  for (const model of candidates) {
+    try {
+      return await verifyModel(model);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(lastError);
+}
+
+async function verifyModel(preferred: AdvisorModel): Promise<AttestedModel> {
   if (!ADVISOR_MODELS.includes(preferred)) {
     throw new Error(`Model not allowed: ${preferred}`);
   }

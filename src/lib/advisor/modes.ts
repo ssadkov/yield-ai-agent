@@ -41,28 +41,32 @@ export function savePreferredChatMode(mode: ChatMode): void {
 }
 
 export const CHAT_MODE_LABEL: Record<ChatMode, string> = {
-  advisor: "Advisor",
-  free: "Free",
+  advisor: "Yield Advisor",
+  free: "Open chat",
 };
+
+/** One line under each mode in the picker. */
+export const CHAT_MODE_HINT: Record<ChatMode, string> = {
+  advisor: "Yields, Safes, plans you sign",
+  free: "Ask anything · same privacy",
+};
+
+/** Why Open chat is greyed out until the wallet has skin in the game. */
+export const OPEN_CHAT_LOCKED_HINT = "Unlocks after a Safe deposit or a credits top-up";
 
 export const CHAT_MODE_EMPTY_TITLE: Record<ChatMode, string> = {
   advisor: "How can I help?",
-  free: "Free playground",
+  free: "Ask anything",
 };
 
 export const CHAT_MODE_EMPTY_BLURB: Record<ChatMode, string> = {
   advisor: "Yields, Solana Safe routes, and a plan you sign yourself.",
-  free: "No Yield AI system prompt or tools — same private TEE model.",
+  free: "Encrypted in your browser, answered inside a verified enclave.",
 };
 
 export const CHAT_MODE_PLACEHOLDER: Record<ChatMode, string> = {
   advisor: "Message Yield AI…",
-  free: "Message freely…",
-};
-
-export const CHAT_MODE_IDLE_SUBTITLE: Record<ChatMode, string> = {
-  advisor: "Ask about yields & Safes",
-  free: "No product prompt",
+  free: "Message privately…",
 };
 
 export const ADVISOR_SUGGESTIONS = [

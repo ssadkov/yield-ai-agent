@@ -91,6 +91,8 @@ export type CreditsState = {
     spentThisMonthUsd: number;
   };
   purchases?: { depositAddress: string; amountUsd: number; status: string; credited: boolean; createdAt: string }[];
+  /** Open chat is unlocked: USDC in the wallet's Safe or any credited purchase. */
+  openChat?: boolean;
   /** Requests, tokens and dollars, this UTC month and all time (tokens from the proxy's metering). */
   usage?: { month: UsageTotals; total: UsageTotals };
   /** NEAR AI public price of the primary advisor model, $ per 1M tokens. */

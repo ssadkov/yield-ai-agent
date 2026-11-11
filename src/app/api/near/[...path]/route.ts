@@ -9,7 +9,8 @@ import {
 } from "@/lib/advisor/proxyPolicy";
 import { creditsEnabled, recordUsage, setUsageTokens } from "@/lib/credits/db";
 import { estimateRequestUsd } from "@/lib/credits/ledger";
-import { walletBalance } from "@/lib/credits/service";
+import { openChatUnlocked, walletBalance } from "@/lib/credits/service";
+import { UNCENSORED_MODEL } from "@/lib/advisor/models";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
 /**
@@ -120,8 +121,13 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
         return refuse(503, "Credit ledger unavailable");
       }
       const parsed = JSON.parse(body) as { max_tokens?: number; model?: string };
-      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200);
       billedModel = typeof parsed.model === "string" ? parsed.model : null;
+      const uncensored = billedModel === UNCENSORED_MODEL;
+      if (uncensored && !(await openChatUnlocked(billedWallet).catch(() => false))) {
+        return refuse(403, "The uncensored model unlocks after a Safe deposit or a credits top-up.");
+      }
+      // Reserve at the model's output price ($/1M, NEAR AI 2026-11-12); the billed cost replaces it.
+      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200, uncensored ? 1.2 : 0.5);
     }
   } else {
     const queryCheck =

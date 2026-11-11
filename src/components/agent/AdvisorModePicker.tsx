@@ -3,22 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import {
   CHAT_MODES,
+  CHAT_MODE_HINT,
   CHAT_MODE_LABEL,
+  OPEN_CHAT_LOCKED_HINT,
   type ChatMode,
 } from "@/lib/advisor/modes";
-
-const MODE_HINTS: Record<ChatMode, string> = {
-  advisor: "Yield AI prompt · tools for yields & plans",
-  free: "No system prompt · open playground",
-};
 
 export function AdvisorModePicker({
   value,
   disabled,
+  openChatUnlocked,
   onChange,
 }: {
   value: ChatMode;
   disabled?: boolean;
+  /** Open chat is shown but cannot be picked until the wallet deposited or bought credits. */
+  openChatUnlocked: boolean;
   onChange: (mode: ChatMode) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -74,19 +74,22 @@ export function AdvisorModePicker({
           <div className="space-y-0.5">
             {CHAT_MODES.map((item) => {
               const selected = item === value;
+              const locked = item === "free" && !openChatUnlocked;
               return (
                 <button
                   key={item}
                   type="button"
                   role="option"
                   aria-selected={selected}
+                  aria-disabled={locked}
                   onClick={() => {
+                    if (locked) return;
                     onChange(item);
                     setOpen(false);
                   }}
                   className={[
                     "flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    selected ? "bg-muted" : "hover:bg-muted/70",
+                    selected ? "bg-muted" : locked ? "cursor-not-allowed opacity-60" : "hover:bg-muted/70",
                   ].join(" ")}
                 >
                   <span
@@ -111,9 +114,10 @@ export function AdvisorModePicker({
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium tracking-tight text-foreground">
                       {CHAT_MODE_LABEL[item]}
+                      {locked ? <span aria-hidden> 🔒</span> : null}
                     </span>
                     <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                      {MODE_HINTS[item]}
+                      {locked ? OPEN_CHAT_LOCKED_HINT : CHAT_MODE_HINT[item]}
                     </span>
                   </span>
                 </button>

@@ -1,4 +1,4 @@
-import { DEFAULT_ADVISOR_MODEL, type AdvisorModel } from "@/lib/advisor/models";
+import { ADVISOR_FALLBACK_MODEL, DEFAULT_ADVISOR_MODEL, type AdvisorModel } from "@/lib/advisor/models";
 import { seedHistoryForMode, type ChatMode } from "@/lib/advisor/modes";
 import {
   createSessionKeys,
@@ -41,7 +41,8 @@ export async function startAdvisorSession(
   model: AdvisorModel = DEFAULT_ADVISOR_MODEL,
   mode: ChatMode = "advisor"
 ): Promise<AdvisorSession> {
-  const attested = await pickAttestedModel(model);
+  // The advisor may fall back to a second attested model; Open chat uses exactly what was picked.
+  const attested = await pickAttestedModel(mode === "advisor" ? [DEFAULT_ADVISOR_MODEL, ADVISOR_FALLBACK_MODEL] : [model]);
   const keys = createSessionKeys();
   const history = seedHistory !== undefined ? seedHistory : seedHistoryForMode(mode);
   return {

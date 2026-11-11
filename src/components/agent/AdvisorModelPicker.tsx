@@ -1,26 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  ADVISOR_MODEL_OPTIONS,
-  advisorModelShortLabel,
-  type AdvisorModel,
-} from "@/lib/advisor/models";
+import { OPEN_CHAT_MODEL_OPTIONS, openChatModelLabel, type OpenChatModel } from "@/lib/advisor/models";
 
-const MODEL_HINTS: Record<AdvisorModel, string> = {
-  "deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated": "Abliterated · 1M context",
-  "z-ai/glm-5.3-flash": "Default · best for advice",
-  "Qwen/Qwen3.8-27B-abliterated": "Abliterated · lighter & faster",
-};
+/** Model choice for Open chat only; Yield Advisor always uses the default model. */
 
 export function AdvisorModelPicker({
   value,
   disabled,
   onChange,
 }: {
-  value: AdvisorModel;
+  value: OpenChatModel;
   disabled?: boolean;
-  onChange: (model: AdvisorModel) => void;
+  onChange: (model: OpenChatModel) => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -48,11 +40,11 @@ export function AdvisorModelPicker({
         disabled={disabled}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label="Advisor model"
+        aria-label="Open chat model"
         onClick={() => setOpen((current) => !current)}
         className="inline-flex h-8 max-w-[13rem] items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 text-[11.5px] font-medium tracking-tight text-foreground/85 transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
       >
-        <span className="truncate">{advisorModelShortLabel(value)}</span>
+        <span className="truncate">{openChatModelLabel(value)}</span>
         <svg
           viewBox="0 0 24 24"
           className={["h-3 w-3 shrink-0 text-muted-foreground transition-transform", open ? "rotate-180" : ""].join(" ")}
@@ -66,14 +58,14 @@ export function AdvisorModelPicker({
       {open ? (
         <div
           role="listbox"
-          aria-label="Advisor models"
+          aria-label="Open chat models"
           className="panel-popover absolute bottom-[calc(100%+0.5rem)] left-0 z-30 w-[min(18.5rem,calc(100vw-2.5rem))] overflow-hidden rounded-2xl p-1.5 shadow-lg"
         >
           <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             Model
           </p>
           <div className="space-y-0.5">
-            {ADVISOR_MODEL_OPTIONS.map((option) => {
+            {OPEN_CHAT_MODEL_OPTIONS.map((option) => {
               const selected = option.id === value;
               return (
                 <button
@@ -114,7 +106,7 @@ export function AdvisorModelPicker({
                       {option.label}
                     </span>
                     <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                      {MODEL_HINTS[option.id]}
+                      {option.hint}
                     </span>
                   </span>
                 </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionCard } from "@/components/agent/ActionCard";
 import { ChatMarkdown } from "@/components/agent/ChatMarkdown";
 import {
@@ -20,14 +20,13 @@ import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
 import {
   DEFAULT_ADVISOR_MODEL,
   advisorModelShortLabel,
-  loadPreferredAdvisorModel,
-  savePreferredAdvisorModel,
-  type AdvisorModel,
+  loadPreferredOpenChatModel,
+  savePreferredOpenChatModel,
+  type OpenChatModel,
 } from "@/lib/advisor/models";
 import {
   CHAT_MODE_EMPTY_BLURB,
   CHAT_MODE_EMPTY_TITLE,
-  CHAT_MODE_IDLE_SUBTITLE,
   CHAT_MODE_PLACEHOLDER,
   DEFAULT_CHAT_MODE,
   loadPreferredChatMode,
@@ -38,8 +37,9 @@ import {
 import { AnswerProofLine } from "@/components/agent/AnswerProofLine";
 import { AdvisorModePicker } from "@/components/agent/AdvisorModePicker";
 import { AdvisorModelPicker } from "@/components/agent/AdvisorModelPicker";
-import { AiPoolMeter, rememberInferenceIds } from "@/components/agent/AiPoolMeter";
+import { rememberInferenceIds } from "@/components/agent/AiPoolMeter";
 import { CreditsPanel } from "@/components/agent/CreditsPanel";
+import type { CreditsState } from "@/lib/credits/client";
 
 const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
 
@@ -204,19 +204,34 @@ const EMPTY_HISTORIES: Histories = { advisor: [], free: [] };
 
 export function AdvisorChatShell() {
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<ChatMode>(DEFAULT_CHAT_MODE);
+  const [chosenMode, setMode] = useState<ChatMode>(DEFAULT_CHAT_MODE);
+  const [credits, setCredits] = useState<{ state: CreditsState | null; wallet: string | null }>({
+    state: null,
+    wallet: null,
+  });
   const [histories, setHistories] = useState<Histories>(EMPTY_HISTORIES);
   const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [preferredModel, setPreferredModel] = useState<AdvisorModel>(DEFAULT_ADVISOR_MODEL);
+  const [preferredModel, setPreferredModel] = useState<OpenChatModel>(DEFAULT_ADVISOR_MODEL);
   const [model, setModel] = useState<string | null>(null);
   const [attestation, setAttestation] = useState<AttestationSummary | null>(null);
   const [checking, setChecking] = useState<Set<string>>(() => new Set());
   const sessionsRef = useRef<Record<ChatMode, AdvisorSession | null>>({ advisor: null, free: null });
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamId, setStreamId] = useState<string | null>(null);
+
+  // Open chat needs USDC in the Safe or bought credits (the proxy enforces it for the uncensored
+  // model). With credits off there is nothing to gate on, so it stays open.
+  const openChatUnlocked =
+    credits.state?.enabled === false ||
+    Boolean(credits.wallet && credits.state?.signedIn && credits.state.wallet === credits.wallet && credits.state.openChat);
+  const mode: ChatMode = chosenMode === "free" && !openChatUnlocked ? "advisor" : chosenMode;
+  const onCreditsState = useCallback(
+    (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
+    []
+  );
 
   const messages = histories[mode];
 
@@ -233,7 +248,7 @@ export function AdvisorChatShell() {
       free: loadChatHistory("free"),
     });
     setMode(loadPreferredChatMode());
-    setPreferredModel(loadPreferredAdvisorModel());
+    setPreferredModel(loadPreferredOpenChatModel());
     setHydrated(true);
   }, []);
 
@@ -248,13 +263,13 @@ export function AdvisorChatShell() {
 
   const ensureSession = async (currentMode: ChatMode, currentMessages: UiMessage[]) => {
     const existing = sessionsRef.current[currentMode];
-    if (existing?.attested.model === preferredModel && existing.mode === currentMode) {
+    if (existing && existing.mode === currentMode && (currentMode === "advisor" || existing.attested.model === preferredModel)) {
       return existing;
     }
     setStatus("Verifying TEE attestation");
     const session = await startAdvisorSession(
       historyFromUiMessages(currentMessages, currentMode),
-      preferredModel,
+      currentMode === "advisor" ? DEFAULT_ADVISOR_MODEL : preferredModel,
       currentMode
     );
     sessionsRef.current[currentMode] = session;
@@ -279,13 +294,15 @@ export function AdvisorChatShell() {
     }
   };
 
-  const selectModel = (next: AdvisorModel) => {
+  const selectModel = (next: OpenChatModel) => {
     if (busy || next === preferredModel) return;
-    savePreferredAdvisorModel(next);
+    savePreferredOpenChatModel(next);
     setPreferredModel(next);
-    sessionsRef.current = { advisor: null, free: null };
-    setModel(null);
-    setAttestation(null);
+    sessionsRef.current.free = null;
+    if (mode === "free") {
+      setModel(null);
+      setAttestation(null);
+    }
     setError(null);
   };
 
@@ -383,40 +400,7 @@ export function AdvisorChatShell() {
       aria-label="Private advisor chat"
       className="panel-glass relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] sm:rounded-[28px]"
     >
-      <div className="flex items-center justify-between gap-3 px-3.5 pb-1.5 pt-3.5 sm:px-5 sm:pb-2 sm:pt-5">
-        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background sm:h-10 sm:w-10">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
-              <path
-                d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"
-                fill="currentColor"
-                opacity="0.95"
-              />
-              <path
-                d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"
-                fill="currentColor"
-                opacity="0.7"
-              />
-            </svg>
-            <span
-              className={[
-                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card",
-                busy ? "animate-pulse bg-foreground" : "bg-emerald-500",
-              ].join(" ")}
-              aria-hidden
-            />
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-semibold tracking-tight">Yield AI</h2>
-            <p className="truncate text-xs text-muted-foreground">
-              {busy
-                ? thinkingLabel
-                : model && attestation
-                  ? `${advisorModelShortLabel(model)} · TEE verified`
-                  : CHAT_MODE_IDLE_SUBTITLE[mode]}
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-end gap-3 px-3.5 pb-1.5 pt-3.5 sm:px-5 sm:pb-2 sm:pt-5">
         <div className="flex shrink-0 items-center gap-1.5">
           {messages.length > 0 ? (
             <button
@@ -525,8 +509,7 @@ export function AdvisorChatShell() {
         <div ref={bottomRef} />
       </div>
 
-      <CreditsPanel />
-      <AiPoolMeter />
+      <CreditsPanel onState={onCreditsState} />
 
       <form
         className="px-3 pb-3 pt-1 sm:px-4 sm:pb-4"
@@ -552,8 +535,15 @@ export function AdvisorChatShell() {
           />
           <div className="flex items-center justify-between gap-2 px-1.5 pb-0.5 pt-0.5 sm:px-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <AdvisorModePicker value={mode} disabled={busy} onChange={selectMode} />
-              <AdvisorModelPicker value={preferredModel} disabled={busy} onChange={selectModel} />
+              <AdvisorModePicker
+                value={mode}
+                disabled={busy}
+                openChatUnlocked={openChatUnlocked}
+                onChange={selectMode}
+              />
+              {mode === "free" ? (
+                <AdvisorModelPicker value={preferredModel} disabled={busy} onChange={selectModel} />
+              ) : null}
             </div>
             {busy ? (
               <button
@@ -586,7 +576,6 @@ export function AdvisorChatShell() {
         </div>
         <p className="mt-1.5 hidden px-1 text-center text-[10px] text-muted-foreground/70 sm:mt-2 sm:block">
           Enter to send · Shift+Enter for new line
-          {mode === "free" ? " · Free mode uses the same AI credits" : ""}
         </p>
       </form>
     </section>

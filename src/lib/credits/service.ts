@@ -12,16 +12,36 @@ import {
   type Purchase,
 } from "./db.ts";
 import { loadSafeSummary } from "../agent/safeSummary.server.ts";
+import type { SafeSummary } from "../agent/safeSummary.ts";
 import { DEFAULT_ADVISOR_MODEL } from "../advisor/models.ts";
 import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
 
+/** The wallet's Safe, or null when it cannot be read right now. */
+async function safeOrNull(wallet: string): Promise<SafeSummary | null> {
+  try {
+    return await loadSafeSummary(wallet);
+  } catch {
+    return null;
+  }
+}
+
 /** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
 export async function yieldBudgetUsd(wallet: string): Promise<number> {
-  try {
-    return (await loadSafeSummary(wallet)).accruedFeeUsdc;
-  } catch {
-    return 0;
-  }
+  return (await safeOrNull(wallet))?.accruedFeeUsdc ?? 0;
+}
+
+/** USDC the Safe holds, idle or in Kamino. */
+function safeDepositUsdc(safe: SafeSummary | null): number {
+  return safe?.exists ? safe.idleUsdc + safe.kamino.valueUsdc : 0;
+}
+
+/**
+ * Open chat (and its uncensored model) is for wallets with skin in the game: USDC in their Safe,
+ * or credits they bought. Everyone else gets Yield Advisor.
+ */
+export async function openChatUnlocked(wallet: string): Promise<boolean> {
+  if ((await purchasedUsd(wallet)) > 0) return true;
+  return safeDepositUsdc(await safeOrNull(wallet)) > 0;
 }
 
 export const ONE_CLICK = "https://1click.chaindefuser.com/v0";
@@ -77,14 +97,14 @@ export async function reconcileCosts(): Promise<number> {
 
 export async function walletBalance(wallet: string): Promise<CreditBalance> {
   await reconcileCosts().catch(() => 0);
-  const [purchased, spend, fromYield] = await Promise.all([
-    purchasedUsd(wallet),
-    spendByMonth(wallet),
-    yieldBudgetUsd(wallet),
-  ]);
+  return balanceFrom(wallet, await safeOrNull(wallet));
+}
+
+async function balanceFrom(wallet: string, safe: SafeSummary | null): Promise<CreditBalance> {
+  const [purchased, spend] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet)]);
   return computeBalance({
     freeMonthlyUsd: freeMonthlyUsd(),
-    yieldUsd: fromYield,
+    yieldUsd: safe?.accruedFeeUsdc ?? 0,
     purchasedUsd: purchased,
     spendByMonth: spend,
     now: new Date(),
@@ -127,14 +147,18 @@ export async function walletSummary(wallet: string): Promise<{
   usage: Awaited<ReturnType<typeof usageTotals>>;
   price: ModelPrice | null;
   remaining: ReturnType<typeof estimateRemaining>;
+  /** Whether Open chat is unlocked: USDC in the Safe or any credited purchase. */
+  openChat: boolean;
 }> {
   // Billed costs first, so usage totals and the balance read the same numbers.
   await reconcileCosts().catch(() => 0);
+  const safe = await safeOrNull(wallet);
   const [balance, purchases, usage, price] = await Promise.all([
-    walletBalance(wallet),
+    balanceFrom(wallet, safe),
     listPurchases(wallet),
     usageTotals(wallet),
     advisorModelPrice(),
   ]);
-  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price) };
+  const openChat = purchases.some((p) => p.credited) || safeDepositUsdc(safe) > 0;
+  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price), openChat };
 }
