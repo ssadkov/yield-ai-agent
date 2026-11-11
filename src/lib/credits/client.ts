@@ -85,12 +85,27 @@ export type CreditsState = {
   paymentAssets?: PaymentAsset[];
   balance?: {
     freeLeftUsd: number;
+    yieldLeftUsd: number;
     purchasedLeftUsd: number;
     availableUsd: number;
     spentThisMonthUsd: number;
   };
   purchases?: { depositAddress: string; amountUsd: number; status: string; credited: boolean; createdAt: string }[];
+  /** Requests, tokens and dollars, this UTC month and all time (tokens from the proxy's metering). */
+  usage?: { month: UsageTotals; total: UsageTotals };
+  /** NEAR AI public price of the primary advisor model, $ per 1M tokens. */
+  price?: { model: string; inputUsdPerMillion: number; outputUsdPerMillion: number } | null;
+  /** What `availableUsd` buys on that model. */
+  remaining?: { model: string; outputTokens: number | null; typicalRequests: number; typicalRequestUsd: number };
   error?: string;
+};
+
+export type UsageTotals = {
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+  usd: number;
 };
 
 export async function fetchCredits(): Promise<CreditsState> {

@@ -3,6 +3,7 @@
 import { SessionPanel } from "@/components/agent/SessionPanel";
 import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
 import { SHOW_APTOS } from "@/lib/agent/features";
+import { SafePanel } from "@/components/agent/SafePanel";
 
 function truncateAddress(address: string): string {
   if (address.length <= 12) return address;
@@ -135,6 +136,8 @@ export function WalletSidePanel({
       ) : null}
 
       {SHOW_APTOS && connected ? <SessionPanel aptosAddress={aptosAddress} /> : null}
+
+      {connected && solanaAddress ? <SafePanel /> : null}
 
       {showDeposit ? (
         <IntentsDepositPanel

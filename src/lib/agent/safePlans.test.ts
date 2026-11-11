@@ -148,3 +148,49 @@ test("a deposit may create the Safe's own USDC account, and nothing else", () =>
   // Outside a plain deposit the ATA program is not expected at all.
   assert.throws(() => checkPlanTransaction(ok, { owner, kind: "create_safe_and_deposit", amountRaw: BigInt(1_000_000) }), PlanCheckError);
 });
+
+const withdrawFixture = JSON.parse(readFileSync(new URL("./fixtures/usdc-withdraw-plan.json", import.meta.url), "utf8"));
+const WITHDRAW = [183, 18, 70, 156, 148, 109, 161, 34];
+const KAMINO_WITHDRAW = [199, 101, 41, 45, 213, 98, 224, 200];
+
+function u64Data(discriminator: number[], amount: bigint, extra: number[] = []): Buffer {
+  const out = Buffer.alloc(16 + extra.length);
+  Buffer.from(discriminator).copy(out, 0);
+  out.writeBigUInt64LE(amount, 8);
+  Buffer.from(extra).copy(out, 16);
+  return out;
+}
+
+test("live Safe → wallet withdrawal passes for its owner and amount only", () => {
+  const tx = withdrawFixture.steps[0].transaction;
+  checkPlanTransaction(tx, { owner: pilotOwner, kind: "withdraw", amountRaw: BigInt(withdrawFixture.amountRaw) });
+  assert.throws(() => checkPlanTransaction(tx, { owner: pilotOwner, kind: "withdraw", amountRaw: BigInt(2_000_000) }), PlanCheckError);
+  assert.throws(() => checkPlanTransaction(tx, { owner: pilotOwner, kind: "deposit", amountRaw: BigInt(withdrawFixture.amountRaw) }), PlanCheckError);
+});
+
+test("a withdrawal may create only the owner's own USDC account", () => {
+  const owner = Keypair.generate().publicKey;
+  const ok = createTx(owner, [createAtaIx(owner, usdcAta(owner), owner, USDC_MINT), safeIx(owner, u64Data(WITHDRAW, BigInt(500_000)))]);
+  checkPlanTransaction(ok, { owner, kind: "withdraw", amountRaw: BigInt(500_000) });
+  const stranger = Keypair.generate().publicKey;
+  const elsewhere = createTx(owner, [
+    createAtaIx(owner, usdcAta(stranger), stranger, USDC_MINT),
+    safeIx(owner, u64Data(WITHDRAW, BigInt(500_000))),
+  ]);
+  assert.throws(() => checkPlanTransaction(elsewhere, { owner, kind: "withdraw", amountRaw: BigInt(500_000) }), PlanCheckError);
+});
+
+test("a Kamino redeem burns the expected shares and may create only the treasury's USDC account", () => {
+  const owner = Keypair.generate().publicKey;
+  const treasury = Keypair.generate().publicKey;
+  const shares = BigInt(937_000);
+  const redeem = safeIx(owner, u64Data(KAMINO_WITHDRAW, shares, [0]));
+  const ok = createTx(owner, [createAtaIx(owner, usdcAta(treasury), treasury, USDC_MINT), redeem]);
+  checkPlanTransaction(ok, { owner, kind: "kamino_redeem", amountRaw: shares, treasury });
+  assert.throws(() => checkPlanTransaction(ok, { owner, kind: "kamino_redeem", amountRaw: shares + BigInt(1), treasury }), PlanCheckError);
+  // Without the on-chain treasury to compare with, no account creation is accepted.
+  assert.throws(() => checkPlanTransaction(ok, { owner, kind: "kamino_redeem", amountRaw: shares }), PlanCheckError);
+  const other = Keypair.generate().publicKey;
+  const wrongTreasury = createTx(owner, [createAtaIx(owner, usdcAta(other), other, USDC_MINT), redeem]);
+  assert.throws(() => checkPlanTransaction(wrongTreasury, { owner, kind: "kamino_redeem", amountRaw: shares, treasury }), PlanCheckError);
+});

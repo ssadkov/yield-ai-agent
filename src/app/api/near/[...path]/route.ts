@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { usageFromSse } from "@/lib/advisor/usage";
 import {
   checkAttestationQuery,
   checkChatBody,
@@ -6,7 +7,7 @@ import {
   checkSignatureQuery,
   resolveProxyRoute,
 } from "@/lib/advisor/proxyPolicy";
-import { creditsEnabled, recordUsage } from "@/lib/credits/db";
+import { creditsEnabled, recordUsage, setUsageTokens } from "@/lib/credits/db";
 import { estimateRequestUsd } from "@/lib/credits/ledger";
 import { walletBalance } from "@/lib/credits/service";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
@@ -65,6 +66,28 @@ function refuse(status: number, error: string) {
   return NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
 }
 
+/**
+ * Read a copy of the completion stream and store its token counts. Only the final `usage` chunk
+ * is parsed; message fields stay ciphertext and are never decoded or logged.
+ */
+async function meterTokens(stream: ReadableStream<Uint8Array>, inferenceId: string): Promise<void> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let tail = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // Keep only the end of the stream: the usage chunk is last.
+      tail = (tail + decoder.decode(value, { stream: true })).slice(-4096);
+    }
+    const usage = usageFromSse(tail);
+    if (usage) await setUsageTokens(inferenceId, usage);
+  } catch {
+    /* metering is best effort; the dollar cost still comes from NEAR AI billing */
+  }
+}
+
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const key = process.env.NEAR_AI_API_KEY?.trim();
   if (!key) return refuse(503, "NEAR_AI_API_KEY is not configured");
@@ -80,6 +103,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   // With credits on (DATABASE_URL), chat needs a wallet session and a positive balance.
   let billedWallet: string | null = null;
   let estimatedUsd = 0;
+  let billedModel: string | null = null;
   if (route.kind === "chat") {
     const headerCheck = checkChatHeaders(request.headers);
     if (!headerCheck.ok) return refuse(headerCheck.status, headerCheck.error);
@@ -95,8 +119,9 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
       } catch {
         return refuse(503, "Credit ledger unavailable");
       }
-      const maxTokens = (JSON.parse(body) as { max_tokens?: number }).max_tokens ?? 1200;
-      estimatedUsd = estimateRequestUsd(maxTokens);
+      const parsed = JSON.parse(body) as { max_tokens?: number; model?: string };
+      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200);
+      billedModel = typeof parsed.model === "string" ? parsed.model : null;
     }
   } else {
     const queryCheck =
@@ -133,12 +158,20 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const inferenceId = upstream.headers.get("inference-id");
   if (inferenceId) out.set("inference-id", inferenceId);
   out.set("cache-control", "no-store");
+  let responseBody = upstream.body;
   if (billedWallet && inferenceId && upstream.ok) {
     // Estimate now; NEAR AI's billed cost replaces it on the next balance read.
-    await recordUsage(billedWallet, inferenceId, estimatedUsd).catch(() => undefined);
+    await recordUsage(billedWallet, inferenceId, estimatedUsd, billedModel).catch(() => undefined);
+    if (upstream.body) {
+      // Read the token counts from the final stream chunk (plain text) while the browser gets the
+      // same bytes untouched; `after` keeps the function alive until the copy is read.
+      const [toBrowser, toMeter] = upstream.body.tee();
+      responseBody = toBrowser;
+      after(() => meterTokens(toMeter, inferenceId));
+    }
   }
 
-  return new NextResponse(upstream.body, {
+  return new NextResponse(responseBody, {
     status: upstream.status,
     headers: out,
   });

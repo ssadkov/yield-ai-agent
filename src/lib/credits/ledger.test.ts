@@ -45,6 +45,29 @@ test("overspent wallet has nothing available", () => {
   assert.ok(b.purchasedLeftUsd < 0);
 });
 
+test("Safe yield pays before purchased credits", () => {
+  // October 0.25 spent → 0.20 above the allowance; November 0.10 → 0.05 above. 0.25 paid in total.
+  const b = computeBalance({
+    freeMonthlyUsd: 0.05,
+    yieldUsd: 0.15,
+    purchasedUsd: 1,
+    spendByMonth: [
+      { month: "2026-10", usd: 0.25 },
+      { month: "2026-11", usd: 0.1 },
+    ],
+    now,
+  });
+  assert.equal(b.yieldLeftUsd, 0);
+  assert.ok(Math.abs(b.purchasedLeftUsd - 0.9) < 1e-12);
+  assert.ok(Math.abs(b.availableUsd - 0.9) < 1e-12);
+});
+
+test("unspent Safe yield adds to what is available", () => {
+  const b = computeBalance({ freeMonthlyUsd: 0.05, yieldUsd: 3.4, purchasedUsd: 0, spendByMonth: [], now });
+  assert.ok(Math.abs(b.availableUsd - 3.45) < 1e-12);
+  assert.equal(b.yieldLeftUsd, 3.4);
+});
+
 test("helpers", () => {
   assert.equal(monthKey(now), "2026-11");
   assert.ok(Math.abs(estimateRequestUsd(900) - 0.00145) < 1e-12);
