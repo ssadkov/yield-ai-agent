@@ -6,6 +6,7 @@ import {
   type ClientKeys,
 } from "@/lib/advisor/e2ee";
 import { ADVISOR_MODELS, type AdvisorModel } from "@/lib/advisor/models";
+import type { VerifiedModelAttestation } from "@nearai/inference-sdk";
 
 const PROXY = "/agent/api/near";
 
@@ -25,6 +26,8 @@ export type AttestedModel = {
   modelPubKeyHex: string;
   nonce: string;
   attestation: AttestationSummary;
+  /** SDK results kept in memory; response signatures must match one of these signers. */
+  verifiedAttestations: readonly VerifiedModelAttestation[];
 };
 
 export type ChatMessage =
@@ -92,6 +95,7 @@ export async function pickAttestedModel(): Promise<AttestedModel> {
           signingAddress: first.signer.signingAddress,
           verifiedAt: Date.now(),
         },
+        verifiedAttestations: verified,
       };
     } catch (error) {
       lastError = `Attestation failed for ${model}: ${error instanceof Error ? error.message : String(error)}`;
@@ -163,11 +167,29 @@ export type StreamHandlers = {
   onStatus?: (status: string) => void;
 };
 
+/** Exact bytes of one completion, kept so the browser can check NEAR's signature over them. */
+export type CompletionEvidence = {
+  completionId: string;
+  requestBody: Uint8Array;
+  responseBody: Uint8Array;
+};
+
 export type StreamResult = {
   text: string;
   toolCalls: { id: string; name: string; arguments: string }[];
   inferenceId: string | null;
+  evidence: CompletionEvidence | null;
 };
+
+function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
 
 export async function streamChatCompletion(options: {
   attested: AttestedModel;
@@ -186,6 +208,7 @@ export async function streamChatCompletion(options: {
     reasoning_effort: "low",
   };
 
+  const requestJson = JSON.stringify(body);
   const response = await proxyFetch("v1/chat/completions", {
     method: "POST",
     headers: {
@@ -196,7 +219,7 @@ export async function streamChatCompletion(options: {
       "X-Encryption-Version": "2",
       "X-Encrypt-All-Fields": "true",
     },
-    body: JSON.stringify(body),
+    body: requestJson,
   });
 
   if (!response.ok || !response.body) {
@@ -209,6 +232,8 @@ export async function streamChatCompletion(options: {
   const decoder = new TextDecoder();
   let buffer = "";
   let text = "";
+  let completionId = "";
+  const rawChunks: Uint8Array[] = [];
   const toolMap = new Map<number, { id: string; name: string; arguments: string }>();
 
   // Every streamed field must decrypt with our key. A field that does not is either tampering or
@@ -224,6 +249,7 @@ export async function streamChatCompletion(options: {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    rawChunks.push(value);
     buffer += decoder.decode(value, { stream: true });
     let newline = buffer.indexOf("\n");
     while (newline >= 0) {
@@ -234,6 +260,7 @@ export async function streamChatCompletion(options: {
       const data = line.slice(5).trim();
       if (!data || data === "[DONE]") continue;
       let parsed: {
+        id?: string;
         choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[];
       };
       try {
@@ -241,6 +268,7 @@ export async function streamChatCompletion(options: {
       } catch {
         continue;
       }
+      if (!completionId && typeof parsed.id === "string") completionId = parsed.id;
       const delta = parsed.choices?.[0]?.delta ?? {};
       if (delta.content) {
         const piece = await tryDecrypt(delta.content);
@@ -264,5 +292,64 @@ export async function streamChatCompletion(options: {
     text: text.replace(/^\n+/, ""),
     toolCalls: [...toolMap.values()].filter((t) => t.id && t.name),
     inferenceId,
+    evidence: completionId
+      ? { completionId, requestBody: new TextEncoder().encode(requestJson), responseBody: concatBytes(rawChunks) }
+      : null,
   };
+}
+
+export type AnswerProof = {
+  verified: boolean;
+  /** provider_tee: signed inside the model's TEE by the attested signer. */
+  signatureKind?: string;
+  signer?: string;
+  completionIds: string[];
+  error?: string;
+  /** First bytes of the last request as it left the browser (ciphertext), for the proof panel. */
+  requestExcerpt: string;
+  requestBytes: number;
+  modelKeyFingerprint: string;
+  checkedAt: number;
+};
+
+/**
+ * Check NEAR's signature over the exact request and response bytes of every completion in a turn,
+ * and that the signer is the model whose attestation we verified before encrypting. Signature
+ * records expire after about an hour, so this runs right after the answer.
+ */
+export async function verifyAnswer(attested: AttestedModel, evidence: CompletionEvidence[]): Promise<AnswerProof> {
+  const last = evidence[evidence.length - 1];
+  const base: AnswerProof = {
+    verified: false,
+    completionIds: evidence.map((e) => e.completionId),
+    requestExcerpt: last ? new TextDecoder().decode(last.requestBody.slice(0, 600)) : "",
+    requestBytes: last?.requestBody.length ?? 0,
+    modelKeyFingerprint: `${attested.modelPubKeyHex.slice(0, 8)}…${attested.modelPubKeyHex.slice(-8)}`,
+    checkedAt: Date.now(),
+  };
+  if (evidence.length === 0) return { ...base, error: "No completion id to check" };
+  try {
+    const { AttestationClient, verifyModelResponse } = await import("@nearai/inference-sdk");
+    const client = new AttestationClient({ baseUrl: `${window.location.origin}${PROXY}/v1` });
+    let kind = "";
+    let signer = "";
+    for (const item of evidence) {
+      const signature = await client.fetchCompletionSignature({ completionId: item.completionId, signingAlgo: "ed25519" });
+      const attestation = attested.verifiedAttestations.find(
+        (v) => v.signer.signingAddress.toLowerCase() === signature.signer.signingAddress.toLowerCase()
+      );
+      if (!attestation) throw new Error("Signer does not match the attested model");
+      verifyModelResponse({
+        requestBody: item.requestBody,
+        responseBody: item.responseBody,
+        signature,
+        attestation,
+      });
+      kind = signature.kind;
+      signer = signature.signer.signingAddress;
+    }
+    return { ...base, verified: true, signatureKind: kind, signer };
+  } catch (error) {
+    return { ...base, error: error instanceof Error ? error.message : String(error) };
+  }
 }
