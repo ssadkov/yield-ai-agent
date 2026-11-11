@@ -6,6 +6,10 @@ import {
   checkSignatureQuery,
   resolveProxyRoute,
 } from "@/lib/advisor/proxyPolicy";
+import { creditsEnabled, recordUsage } from "@/lib/credits/db";
+import { estimateRequestUsd } from "@/lib/credits/ledger";
+import { walletBalance } from "@/lib/credits/service";
+import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
 /**
  * Blind proxy to NEAR AI Cloud. Adds our API key; does not log request/response bodies.
@@ -73,12 +77,27 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
 
   const incoming = new URL(request.url);
   let body: string | undefined;
+  // With credits on (DATABASE_URL), chat needs a wallet session and a positive balance.
+  let billedWallet: string | null = null;
+  let estimatedUsd = 0;
   if (route.kind === "chat") {
     const headerCheck = checkChatHeaders(request.headers);
     if (!headerCheck.ok) return refuse(headerCheck.status, headerCheck.error);
     body = await request.text();
     const bodyCheck = checkChatBody(body, request.headers.get("x-encrypt-all-fields") === "true");
     if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
+    if (creditsEnabled()) {
+      billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
+      if (!billedWallet) return refuse(401, "Sign in with your wallet to use the advisor");
+      try {
+        const balance = await walletBalance(billedWallet);
+        if (balance.availableUsd <= 0) return refuse(402, "Out of AI credits. Top up to continue.");
+      } catch {
+        return refuse(503, "Credit ledger unavailable");
+      }
+      const maxTokens = (JSON.parse(body) as { max_tokens?: number }).max_tokens ?? 1200;
+      estimatedUsd = estimateRequestUsd(maxTokens);
+    }
   } else {
     const queryCheck =
       route.kind === "attestation"
@@ -114,6 +133,10 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const inferenceId = upstream.headers.get("inference-id");
   if (inferenceId) out.set("inference-id", inferenceId);
   out.set("cache-control", "no-store");
+  if (billedWallet && inferenceId && upstream.ok) {
+    // Estimate now; NEAR AI's billed cost replaces it on the next balance read.
+    await recordUsage(billedWallet, inferenceId, estimatedUsd).catch(() => undefined);
+  }
 
   return new NextResponse(upstream.body, {
     status: upstream.status,

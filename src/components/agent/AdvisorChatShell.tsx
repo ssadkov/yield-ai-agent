@@ -19,6 +19,7 @@ import {
 import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
 import { AnswerProofLine } from "@/components/agent/AnswerProofLine";
 import { AiPoolMeter, rememberInferenceIds } from "@/components/agent/AiPoolMeter";
+import { CreditsPanel } from "@/components/agent/CreditsPanel";
 
 const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
 
@@ -347,6 +348,7 @@ export function AdvisorChatShell() {
         <div ref={bottomRef} />
       </div>
 
+      <CreditsPanel />
       <AiPoolMeter />
 
       <form

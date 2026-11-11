@@ -16,6 +16,19 @@
 
 Проверка без UI: ключ в `.env.local`, затем `node scripts/near-ai-e2ee-probe.mjs`.
 
+## AI credits (optional — без них чат открыт всем, потолок только `spend_limit`)
+
+Кредиты включаются, когда задан `DATABASE_URL`. Тогда чат требует входа подписью Solana-кошелька и положительного баланса.
+
+| Variable | What it is |
+|---|---|
+| `DATABASE_URL` | Neon Postgres (Vercel → Storage → Neon). Таблицы `advisor_usage` и `advisor_purchases` создаются сами при первом запросе. Промптов и ответов там нет — кошельки, id запросов NEAR AI с ценой, покупки. |
+| `SESSION_SECRET` | Случайная строка 32+ символов: подписывает challenge и токен сессии. Сменить = разлогинить всех. |
+| `ADVISOR_FREE_USD_PER_MONTH` | Бесплатный лимит на кошелёк в месяц из AI-пула, по умолчанию `0.05`. |
+| `CREDITS_RECEIVER` | Адрес, куда 1-Click платит за купленные кредиты (по умолчанию USDC на Solana). Отдельный кошелёк, не ключ admin/upgrade программы. Без него покупка выключена, бесплатный лимит работает. |
+| `CREDITS_DESTINATION_ASSET` | Актив получения в формате 1-Click, по умолчанию USDC на Solana. |
+| `AI_POOL_NEAR_ACCOUNT`, `AI_POOL_PRODUCT_ID` | Чей стейк NEAR AI показывает счётчик пула; по умолчанию `sadkov.near`. |
+
 ## Optional (already in the repo, not new in this branch)
 
 Эти переменные относятся к USDC yields / хосту Safe, не к E2EE-чату:

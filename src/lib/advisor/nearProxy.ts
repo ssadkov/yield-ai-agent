@@ -7,6 +7,7 @@ import {
 } from "@/lib/advisor/e2ee";
 import { ADVISOR_MODELS, type AdvisorModel } from "@/lib/advisor/models";
 import type { VerifiedModelAttestation } from "@nearai/inference-sdk";
+import { sessionHeaders } from "@/lib/credits/client";
 
 const PROXY = "/agent/api/near";
 
@@ -49,6 +50,7 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
     cache: "no-store",
     headers: {
       ...(init?.headers ?? {}),
+      ...sessionHeaders(),
       "x-no-aliasing": "true",
     },
   });
