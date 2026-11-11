@@ -8,6 +8,7 @@ import {
 import { ADVISOR_MODELS, type AdvisorModel } from "@/lib/advisor/models";
 import type { VerifiedModelAttestation } from "@nearai/inference-sdk";
 import { sessionHeaders } from "@/lib/credits/client";
+import { parseUsage, type TokenUsage } from "@/lib/advisor/usage";
 
 const PROXY = "/agent/api/near";
 
@@ -181,6 +182,7 @@ export type StreamResult = {
   toolCalls: { id: string; name: string; arguments: string }[];
   inferenceId: string | null;
   evidence: CompletionEvidence | null;
+  usage: TokenUsage | null;
 };
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
@@ -207,6 +209,8 @@ export async function streamChatCompletion(options: {
     tools: await encryptTools(tools, attested.modelPubKeyHex),
     max_tokens: 900,
     stream: true,
+    // Final chunk carries token counts in plain text; the proxy meters them per wallet.
+    stream_options: { include_usage: true },
     reasoning_effort: "low",
   };
 
@@ -235,6 +239,7 @@ export async function streamChatCompletion(options: {
   let buffer = "";
   let text = "";
   let completionId = "";
+  let usage: TokenUsage | null = null;
   const rawChunks: Uint8Array[] = [];
   const toolMap = new Map<number, { id: string; name: string; arguments: string }>();
 
@@ -271,6 +276,7 @@ export async function streamChatCompletion(options: {
         continue;
       }
       if (!completionId && typeof parsed.id === "string") completionId = parsed.id;
+      usage = parseUsage((parsed as { usage?: unknown }).usage) ?? usage;
       const delta = parsed.choices?.[0]?.delta ?? {};
       if (delta.content) {
         const piece = await tryDecrypt(delta.content);
@@ -297,6 +303,7 @@ export async function streamChatCompletion(options: {
     evidence: completionId
       ? { completionId, requestBody: new TextEncoder().encode(requestJson), responseBody: concatBytes(rawChunks) }
       : null,
+    usage,
   };
 }
 

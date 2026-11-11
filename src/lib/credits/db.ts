@@ -37,6 +37,11 @@ async function ready(): Promise<Sql> {
       created_at timestamptz not null default now()
     )`;
     await db`create index if not exists advisor_usage_wallet on advisor_usage (wallet, created_at)`;
+    await db`alter table advisor_usage
+             add column if not exists model text,
+             add column if not exists prompt_tokens integer,
+             add column if not exists completion_tokens integer,
+             add column if not exists reasoning_tokens integer`;
     await db`create table if not exists advisor_purchases (
       deposit_address text primary key,
       wallet text not null,
@@ -61,11 +66,67 @@ async function ready(): Promise<Sql> {
 type Row = Record<string, unknown>;
 const rows = (result: unknown) => result as Row[];
 
-export async function recordUsage(wallet: string, inferenceId: string, estimatedUsd: number): Promise<void> {
+export async function recordUsage(
+  wallet: string,
+  inferenceId: string,
+  estimatedUsd: number,
+  model: string | null = null
+): Promise<void> {
   const db = await ready();
-  await db`insert into advisor_usage (inference_id, wallet, estimated_usd)
-           values (${inferenceId}, ${wallet}, ${estimatedUsd})
+  await db`insert into advisor_usage (inference_id, wallet, estimated_usd, model)
+           values (${inferenceId}, ${wallet}, ${estimatedUsd}, ${model})
            on conflict (inference_id) do nothing`;
+}
+
+/** Token counts read by the proxy from the completion's final stream chunk. */
+export async function setUsageTokens(
+  inferenceId: string,
+  tokens: { promptTokens: number; completionTokens: number; reasoningTokens: number }
+): Promise<void> {
+  const db = await ready();
+  await db`update advisor_usage
+           set prompt_tokens = ${tokens.promptTokens},
+               completion_tokens = ${tokens.completionTokens},
+               reasoning_tokens = ${tokens.reasoningTokens}
+           where inference_id = ${inferenceId}`;
+}
+
+export type TokenTotals = {
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+  usd: number;
+};
+
+/** This UTC month's and all-time requests, tokens and dollars for one wallet. */
+export async function usageTotals(wallet: string): Promise<{ month: TokenTotals; total: TokenTotals }> {
+  const db = await ready();
+  const result = rows(
+    await db`select
+        (created_at at time zone 'UTC') >= date_trunc('month', now() at time zone 'UTC') as this_month,
+        count(*) as requests,
+        coalesce(sum(prompt_tokens), 0) as prompt_tokens,
+        coalesce(sum(completion_tokens), 0) as completion_tokens,
+        coalesce(sum(reasoning_tokens), 0) as reasoning_tokens,
+        coalesce(sum(coalesce(cost_usd, estimated_usd)), 0) as usd
+      from advisor_usage where wallet = ${wallet} group by 1`
+  );
+  const empty = (): TokenTotals => ({ requests: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0, usd: 0 });
+  const month = empty();
+  const total = empty();
+  for (const r of result) {
+    const row: TokenTotals = {
+      requests: Number(r.requests),
+      promptTokens: Number(r.prompt_tokens),
+      completionTokens: Number(r.completion_tokens),
+      reasoningTokens: Number(r.reasoning_tokens),
+      usd: Number(r.usd),
+    };
+    for (const key of Object.keys(total) as (keyof TokenTotals)[]) total[key] += row[key];
+    if (r.this_month) for (const key of Object.keys(month) as (keyof TokenTotals)[]) month[key] += row[key];
+  }
+  return { month, total };
 }
 
 export async function spendByMonth(wallet: string): Promise<MonthSpend[]> {

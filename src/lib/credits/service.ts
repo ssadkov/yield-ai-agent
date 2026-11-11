@@ -8,9 +8,12 @@ import {
   setUsageCost,
   spendByMonth,
   unpricedUsage,
+  usageTotals,
   type Purchase,
 } from "./db.ts";
 import { loadSafeSummary } from "../agent/safeSummary.server.ts";
+import { ADVISOR_MODELS } from "../advisor/models.ts";
+import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
 
 /** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
 export async function yieldBudgetUsd(wallet: string): Promise<number> {
@@ -88,7 +91,50 @@ export async function walletBalance(wallet: string): Promise<CreditBalance> {
   });
 }
 
-export async function walletSummary(wallet: string): Promise<{ balance: CreditBalance; purchases: Purchase[] }> {
-  const [balance, purchases] = await Promise.all([walletBalance(wallet), listPurchases(wallet)]);
-  return { balance, purchases };
+export type ModelPrice = { model: string; inputUsdPerMillion: number; outputUsdPerMillion: number };
+
+let priceCache: { at: number; price: ModelPrice } | null = null;
+
+/** Public NEAR AI price of the primary advisor model (`GET /v1/models`), cached for an hour. */
+export async function advisorModelPrice(): Promise<ModelPrice | null> {
+  if (priceCache && Date.now() - priceCache.at < 60 * 60_000) return priceCache.price;
+  try {
+    const response = await fetch("https://cloud-api.near.ai/v1/models", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+    const json = (await response.json()) as { data?: { id: string; pricing?: { input?: number; output?: number } }[] };
+    const row = json.data?.find((m) => m.id === ADVISOR_MODELS[0]);
+    if (!row?.pricing?.input || !row.pricing.output) return null;
+    const price = { model: row.id, inputUsdPerMillion: row.pricing.input, outputUsdPerMillion: row.pricing.output };
+    priceCache = { at: Date.now(), price };
+    return price;
+  } catch {
+    return null;
+  }
+}
+
+/** What the available dollars buy on the primary model: output tokens, or typical advisor requests. */
+export function estimateRemaining(availableUsd: number, price: ModelPrice | null) {
+  return {
+    model: price?.model ?? ADVISOR_MODELS[0],
+    outputTokens: price ? Math.floor((availableUsd / price.outputUsdPerMillion) * 1_000_000) : null,
+    typicalRequests: Math.floor(availableUsd / TYPICAL_REQUEST_USD),
+    typicalRequestUsd: TYPICAL_REQUEST_USD,
+  };
+}
+
+export async function walletSummary(wallet: string): Promise<{
+  balance: CreditBalance;
+  purchases: Purchase[];
+  usage: Awaited<ReturnType<typeof usageTotals>>;
+  price: ModelPrice | null;
+  remaining: ReturnType<typeof estimateRemaining>;
+}> {
+  // Billed costs first, so usage totals and the balance read the same numbers.
+  await reconcileCosts().catch(() => 0);
+  const [balance, purchases, usage, price] = await Promise.all([
+    walletBalance(wallet),
+    listPurchases(wallet),
+    usageTotals(wallet),
+    advisorModelPrice(),
+  ]);
+  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price) };
 }

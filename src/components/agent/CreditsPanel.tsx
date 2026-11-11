@@ -178,6 +178,29 @@ export function CreditsPanel() {
               </button>
             ) : null}
           </div>
+          {state.remaining || state.usage ? (
+            <p
+              className="mt-0.5 text-muted-foreground"
+              title={
+                state.price
+                  ? `${state.price.model}: $${state.price.inputUsdPerMillion} / $${state.price.outputUsdPerMillion} per 1M input / output tokens (NEAR AI). A typical advisor request is about $${state.remaining?.typicalRequestUsd}.`
+                  : undefined
+              }
+            >
+              {state.remaining
+                ? `≈ ${state.remaining.typicalRequests.toLocaleString("en-US")} requests${
+                    state.remaining.outputTokens !== null
+                      ? ` or ${state.remaining.outputTokens.toLocaleString("en-US")} output tokens`
+                      : ""
+                  } left`
+                : null}
+              {state.usage
+                ? ` · this month: ${state.usage.month.requests} requests, ${(
+                    state.usage.month.promptTokens + state.usage.month.completionTokens
+                  ).toLocaleString("en-US")} tokens, ${usd(state.usage.month.usd)}`
+                : null}
+            </p>
+          ) : null}
           {open ? (
             <div className="mt-2 space-y-2">
               <div className="flex flex-wrap items-center gap-1.5">
