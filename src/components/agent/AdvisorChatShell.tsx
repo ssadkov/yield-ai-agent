@@ -128,7 +128,7 @@ function PrivateBadge({
           show();
         }}
         className={[
-          "inline-flex h-7 items-center rounded-full border px-2.5 text-[11px] font-medium tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-7 items-center rounded-full border px-2.5 text-[12.5px] font-medium tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           verified
             ? "border-emerald-500/45 bg-white text-emerald-600 hover:bg-emerald-50 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-300 dark:hover:bg-emerald-400/15"
             : "border-emerald-500/35 bg-white text-emerald-600/80 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300/80",
@@ -142,13 +142,13 @@ function PrivateBadge({
           aria-label="Private AI"
           className="panel-popover absolute right-0 z-20 mt-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl p-3.5 shadow-lg"
         >
-          <p className="text-[12.5px] leading-relaxed text-foreground/90">{PRIVATE_BRIEF}</p>
+          <p className="text-[14px] leading-relaxed text-foreground/90">{PRIVATE_BRIEF}</p>
           {attestation ? (
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
               {model ?? "Model"} · Intel TDX {attestation.tcbStatus} · {gpu}. Checked in this browser.
             </p>
           ) : (
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
               Nothing is sent until the model’s TEE attestation verifies in this browser.
             </p>
           )}
@@ -156,7 +156,7 @@ function PrivateBadge({
             href={VERIFICATION_CENTER_URL}
             target="_blank"
             rel="noreferrer"
-            className="mt-3 inline-flex text-[12px] font-medium text-emerald-600 underline-offset-2 hover:underline dark:text-emerald-300"
+            className="mt-3 inline-flex text-[13.5px] font-medium text-emerald-600 underline-offset-2 hover:underline dark:text-emerald-300"
           >
             NEAR Verification Center
           </a>
@@ -188,7 +188,7 @@ function ThinkingChip({ label }: { label: string }) {
           />
         </svg>
       </span>
-      <span className="text-[12.5px] font-medium tracking-tight text-foreground/80">
+      <span className="text-[14px] font-medium tracking-tight text-foreground/80">
         {label}
         <span className="gpt-chat-thinking-ellipsis" aria-hidden>
           …
@@ -400,7 +400,7 @@ export function AdvisorChatShell() {
       aria-label="Private advisor chat"
       className="panel-glass relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] sm:rounded-[28px]"
     >
-      <div className="flex items-center justify-end gap-3 px-3.5 pb-1.5 pt-3.5 sm:px-5 sm:pb-2 sm:pt-5">
+      <div className="mx-auto flex w-full max-w-[800px] items-center justify-end gap-3 px-3.5 pb-1.5 pt-3.5 sm:px-5 sm:pb-2 sm:pt-5">
         <div className="flex shrink-0 items-center gap-1.5">
           {messages.length > 0 ? (
             <button
@@ -426,14 +426,16 @@ export function AdvisorChatShell() {
         </div>
       </div>
 
-      <div className="scrollbar-hide flex-1 space-y-3 overflow-y-auto overscroll-contain px-3.5 pb-3 sm:space-y-4 sm:px-5 sm:pb-4">
+      <div className="scrollbar-hide flex-1 overflow-y-auto overscroll-contain px-3.5 pb-3 sm:px-5 sm:pb-4">
+        {/* One readable column, centered, however wide the card is. */}
+        <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col gap-3 sm:gap-4">
         {messages.length === 0 ? (
-          <div className="flex h-full min-h-[200px] flex-col justify-center gap-5 sm:min-h-[260px] sm:gap-6">
+          <div className="flex min-h-[200px] flex-1 flex-col justify-center gap-5 sm:min-h-[260px] sm:gap-6">
             <div className="space-y-2">
               <p className="text-xl font-semibold tracking-tight text-foreground/90 sm:text-2xl">
                 {CHAT_MODE_EMPTY_TITLE[mode]}
               </p>
-              <p className="max-w-[300px] text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-[420px] text-[15px] leading-relaxed text-muted-foreground">
                 {CHAT_MODE_EMPTY_BLURB[mode]}
               </p>
             </div>
@@ -444,7 +446,7 @@ export function AdvisorChatShell() {
                   type="button"
                   disabled={busy}
                   onClick={() => void send(suggestion)}
-                  className="rounded-2xl border border-border/80 bg-muted/40 px-3.5 py-3 text-left text-[13px] leading-snug text-foreground/90 transition-colors hover:border-foreground/20 hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:px-4 sm:text-sm"
+                  className="rounded-2xl border border-border/80 bg-muted/40 px-3.5 py-3 text-left text-[14px] leading-snug text-foreground/90 transition-colors hover:border-foreground/20 hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:px-4 sm:text-[15px]"
                 >
                   {suggestion}
                 </button>
@@ -463,7 +465,7 @@ export function AdvisorChatShell() {
             >
               <div
                 className={[
-                  "min-w-0 text-[13.5px]",
+                  "min-w-0 text-[15px]",
                   isUser
                     ? "max-w-[86%] whitespace-pre-wrap rounded-[20px] bg-foreground px-4 py-2.5 leading-relaxed text-background"
                     : "w-full rounded-[20px] border border-border/60 bg-muted/45 px-3 py-3 text-foreground sm:px-3.5 sm:py-3.5",
@@ -475,8 +477,8 @@ export function AdvisorChatShell() {
                   <div className="space-y-3">
                     {message.content ? <ChatMarkdown content={message.content} /> : null}
                     {message.plan ? (
-                      <div className="rounded-2xl border border-border/60 bg-background/50 px-3 py-2.5 text-xs">
-                        <p className="text-[11px] font-semibold tracking-tight text-foreground">Proposed plan</p>
+                      <div className="rounded-2xl border border-border/60 bg-background/50 px-3 py-2.5 text-[13px]">
+                        <p className="text-[12.5px] font-semibold tracking-tight text-foreground">Proposed plan</p>
                         <p className="mt-1 font-medium text-foreground/90">
                           {message.plan.amountUsdc} USDC → {message.plan.strategyId}
                         </p>
@@ -501,18 +503,21 @@ export function AdvisorChatShell() {
         {showThinking ? <ThinkingChip label={thinkingLabel} /> : null}
 
         {error ? (
-          <div className="gpt-chat-enter rounded-2xl border border-danger/30 bg-danger/10 px-3.5 py-3 text-sm text-danger">
+          <div className="gpt-chat-enter rounded-2xl border border-danger/30 bg-danger/10 px-3.5 py-3 text-[15px] text-danger">
             {error}
           </div>
         ) : null}
 
         <div ref={bottomRef} />
+        </div>
       </div>
 
-      <CreditsPanel onState={onCreditsState} />
+      <div className="mx-auto w-full max-w-[800px]">
+        <CreditsPanel onState={onCreditsState} />
+      </div>
 
       <form
-        className="px-3 pb-3 pt-1 sm:px-4 sm:pb-4"
+        className="mx-auto w-full max-w-[800px] px-3 pb-3 pt-1 sm:px-4 sm:pb-4"
         onSubmit={(event) => {
           event.preventDefault();
           void send(input);
@@ -531,7 +536,7 @@ export function AdvisorChatShell() {
             placeholder={CHAT_MODE_PLACEHOLDER[mode]}
             rows={2}
             disabled={busy}
-            className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px]"
+            className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px]"
           />
           <div className="flex items-center justify-between gap-2 px-1.5 pb-0.5 pt-0.5 sm:px-2">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -574,7 +579,7 @@ export function AdvisorChatShell() {
             )}
           </div>
         </div>
-        <p className="mt-1.5 hidden px-1 text-center text-[10px] text-muted-foreground/70 sm:mt-2 sm:block">
+        <p className="mt-1.5 hidden px-1 text-center text-[11.5px] text-muted-foreground/70 sm:mt-2 sm:block">
           Enter to send · Shift+Enter for new line
         </p>
       </form>

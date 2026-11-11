@@ -24,10 +24,10 @@ export function AnswerProofLine({
 }) {
   const [open, setOpen] = useState(false);
   if (proof === "checking") {
-    return <p className="mt-1.5 text-[10.5px] text-muted-foreground">Checking the answer’s signature…</p>;
+    return <p className="mt-1.5 text-[12px] text-muted-foreground">Checking the answer’s signature…</p>;
   }
   return (
-    <div className="mt-1.5 text-[10.5px] leading-relaxed">
+    <div className="mt-1.5 text-[12px] leading-relaxed">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -57,13 +57,13 @@ export function AnswerProofLine({
               : "Without a valid signature, treat this answer as unverified."}
           </p>
           <p className="font-medium text-foreground/80">What left your browser ({proof.requestBytes.toLocaleString("en-US")} bytes):</p>
-          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-background/70 p-1.5 font-mono text-[9.5px]">
+          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-background/70 p-1.5 font-mono text-[11px]">
             {proof.requestExcerpt}…
           </pre>
           <a href={VERIFICATION_CENTER_URL} target="_blank" rel="noreferrer" className="underline">
             Re-check in NEAR’s Verification Center
           </a>
-          {proof.completionIds.length ? <p className="font-mono text-[9.5px]">ids: {proof.completionIds.join(", ")}</p> : null}
+          {proof.completionIds.length ? <p className="font-mono text-[11px]">ids: {proof.completionIds.join(", ")}</p> : null}
         </div>
       ) : null}
     </div>

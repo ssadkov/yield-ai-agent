@@ -244,6 +244,15 @@ export async function streamChatCompletion(options: {
 
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
+    // Our proxy's own refusals (sign in, out of credits, trial used up) are written for people.
+    if ([401, 402, 403, 429].includes(response.status)) {
+      try {
+        const refusal = (JSON.parse(detail) as { error?: unknown }).error;
+        if (typeof refusal === "string" && refusal) throw new Error(refusal);
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
+      }
+    }
     throw new Error(`Chat HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`);
   }
 

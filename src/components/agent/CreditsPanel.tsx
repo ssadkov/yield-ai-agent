@@ -152,10 +152,15 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
 
   const balance = state.balance;
   return (
-    <div className="mx-3.5 mb-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed sm:mx-5">
+    <div className="mx-3.5 mb-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[12.5px] leading-relaxed sm:mx-5">
       {!wallet ? (
         <p className="text-muted-foreground">
-          Connect a Solana wallet: ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
+          {state.trial && state.trial.requestsLeft > 0
+            ? `Try it without a wallet: ${state.trial.requestsLeft} free requests left today. `
+            : state.trial
+              ? "Today's free tries are used. "
+              : ""}
+          Connect a Solana wallet for ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
         </p>
       ) : !signedInAs || !state.signedIn ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -166,7 +171,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
             type="button"
             disabled={busy !== null}
             onClick={() => void doSignIn()}
-            className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[11px] font-medium text-primary-foreground disabled:opacity-40"
+            className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[12.5px] font-medium text-primary-foreground disabled:opacity-40"
           >
             {busy === "signin" ? "Sign…" : "Sign in"}
           </button>
@@ -187,13 +192,13 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
                 aria-label="Where free AI comes from"
                 title="Where free AI comes from"
                 onClick={() => setShowPool((v) => !v)}
-                className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[9px] text-muted-foreground align-middle hover:text-foreground"
+                className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10.5px] text-muted-foreground align-middle hover:text-foreground"
               >
                 i
               </button>
             </span>
             {state.purchasesEnabled ? (
-              <button type="button" onClick={() => setOpen((v) => !v)} className="text-[11px] font-medium underline">
+              <button type="button" onClick={() => setOpen((v) => !v)} className="text-[12.5px] font-medium underline">
                 {open ? "Close" : "Top up with any token"}
               </button>
             ) : null}
@@ -221,7 +226,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
                 : null}
             </p>
           ) : null}
-          {showPool ? <AiPoolMeter className="mt-0.5 text-[10.5px] text-muted-foreground" /> : null}
+          {showPool ? <AiPoolMeter className="mt-0.5 text-[12px] text-muted-foreground" /> : null}
           {open ? (
             <div className="mt-2 space-y-2">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -306,7 +311,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
                       {busy === "pay" ? "Sign…" : "Pay with wallet"}
                     </button>
                   ) : (
-                    <p className="mt-1 break-all font-mono text-[10px]">
+                    <p className="mt-1 break-all font-mono text-[11.5px]">
                       Send exactly {quote.amountInFormatted} {quote.asset.symbol} on {quote.asset.chain} to {quote.depositAddress}
                       {quote.depositMemo ? ` (memo ${quote.depositMemo})` : ""}
                       <button type="button" onClick={() => poll(quote.depositAddress)} className="ml-2 underline">

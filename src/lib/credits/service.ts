@@ -2,7 +2,9 @@
  * Server-side credit operations shared by the routes and the NEAR AI proxy.
  */
 import { computeBalance, type CreditBalance } from "./ledger.ts";
+import { clientIp, guestKey, trialLimits, trialState, type TrialState } from "./trial.ts";
 import {
+  trialUsageToday,
   listPurchases,
   purchasedUsd,
   setUsageCost,
@@ -68,6 +70,21 @@ export function purchaseDestination(): { asset: string; recipient: string; decim
   const recipient = process.env.CREDITS_RECEIVER?.trim();
   if (!recipient) return null;
   return { asset: process.env.CREDITS_DESTINATION_ASSET?.trim() || SOLANA_USDC, recipient, decimals: 6 };
+}
+
+/** Free-trial state for a visitor without a wallet session; null when there is no trial for them. */
+export async function visitorTrial(request: Request): Promise<{ guest: string; state: TrialState } | null> {
+  const guest = guestKey(clientIp(request));
+  if (!guest) return null;
+  const usage = await trialUsageToday(guest);
+  return {
+    guest,
+    state: trialState({
+      guestRequestsToday: usage.guestRequests,
+      allGuestsUsdToday: usage.allGuestsUsd,
+      limits: trialLimits(),
+    }),
+  };
 }
 
 /** Replace estimates with NEAR AI's billed cost for requests that have one by now. */

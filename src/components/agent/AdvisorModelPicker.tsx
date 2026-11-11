@@ -42,7 +42,7 @@ export function AdvisorModelPicker({
         aria-haspopup="listbox"
         aria-label="Open chat model"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-8 max-w-[13rem] items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 text-[11.5px] font-medium tracking-tight text-foreground/85 transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex h-8 max-w-[13rem] items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 text-[12.5px] font-medium tracking-tight text-foreground/85 transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
       >
         <span className="truncate">{openChatModelLabel(value)}</span>
         <svg
@@ -61,7 +61,7 @@ export function AdvisorModelPicker({
           aria-label="Open chat models"
           className="panel-popover absolute bottom-[calc(100%+0.5rem)] left-0 z-30 w-[min(18.5rem,calc(100vw-2.5rem))] overflow-hidden rounded-2xl p-1.5 shadow-lg"
         >
-          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          <p className="px-2.5 pb-1 pt-1.5 text-[11.5px] font-medium tracking-wide text-muted-foreground uppercase">
             Model
           </p>
           <div className="space-y-0.5">
@@ -102,10 +102,10 @@ export function AdvisorModelPicker({
                     ) : null}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium tracking-tight text-foreground">
+                    <span className="block text-[14px] font-medium tracking-tight text-foreground">
                       {option.label}
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">
                       {option.hint}
                     </span>
                   </span>
