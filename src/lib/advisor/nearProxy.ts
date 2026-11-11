@@ -3,17 +3,28 @@ import {
   createClientKeys,
   decryptFromModel,
   encryptToModel,
-  randomNonceHex,
   type ClientKeys,
 } from "@/lib/advisor/e2ee";
 import { ADVISOR_MODELS, type AdvisorModel } from "@/lib/advisor/models";
 
 const PROXY = "/agent/api/near";
 
+/** What the NEAR SDK verified before we encrypt anything to this model. */
+export type AttestationSummary = {
+  /** Intel TDX quote verified; TCB status accepted by the SDK's default policy. */
+  tcbStatus: string;
+  /** NVIDIA GPU evidence: verified, or the enclave did not provide any. */
+  gpuEvidence: "verified" | "not_provided";
+  /** Model signer bound to our nonce in the verified quote. */
+  signingAddress: string;
+  verifiedAt: number;
+};
+
 export type AttestedModel = {
   model: AdvisorModel;
   modelPubKeyHex: string;
   nonce: string;
+  attestation: AttestationSummary;
 };
 
 export type ChatMessage =
@@ -40,33 +51,51 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
+/**
+ * Pick the first advisor model whose NEAR attestation verifies, and use the E2EE key bound to it.
+ * `@nearai/inference-sdk` checks every candidate: Intel TDX quote and TCB status, report data
+ * binding our fresh nonce and the signer, RTMR3 event log, MRCONFIGID, and NVIDIA GPU evidence
+ * when present (collateral via NEAR AI's CORS proxies). Every candidate must pass and they must
+ * agree on the key; otherwise we try the next model and never send anything to this one.
+ * The SDK is loaded on first use so it stays out of the page's initial bundle.
+ */
 export async function pickAttestedModel(): Promise<AttestedModel> {
+  const { AttestationClient, verifyModelAttestation } = await import("@nearai/inference-sdk");
+  const client = new AttestationClient({ baseUrl: `${window.location.origin}${PROXY}/v1` });
   let lastError = "No attested model available";
   for (const model of ADVISOR_MODELS) {
-    const nonce = randomNonceHex(32);
-    const query = new URLSearchParams({
-      model,
-      provider: "near",
-      signing_algo: "ed25519",
-      include_tls_fingerprint: "false",
-      nonce,
-    });
-    const response = await proxyFetch(`v1/attestation/report?${query}`);
-    if (!response.ok) {
-      lastError = `Attestation HTTP ${response.status} for ${model}`;
-      continue;
+    try {
+      const fetched = await client.fetchModelAttestations({ model, signingAlgo: "ed25519" });
+      if (fetched.attestations.length === 0) {
+        lastError = `No NEAR attestation for ${model}`;
+        continue;
+      }
+      const verified = await Promise.all(
+        fetched.attestations.map((attestation) =>
+          verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding })
+        )
+      );
+      const keys = new Set(verified.map((v) => v.signingPublicKey).filter((k): k is string => Boolean(k)));
+      if (keys.size !== 1) {
+        lastError = `Attestation for ${model} has ${keys.size} distinct E2EE keys`;
+        continue;
+      }
+      const [key] = keys;
+      const first = verified[0];
+      return {
+        model,
+        modelPubKeyHex: key,
+        nonce: fetched.clientBinding.nonce,
+        attestation: {
+          tcbStatus: first.tcbStatus,
+          gpuEvidence: verified.every((v) => v.gpuEvidence === "verified") ? "verified" : "not_provided",
+          signingAddress: first.signer.signingAddress,
+          verifiedAt: Date.now(),
+        },
+      };
+    } catch (error) {
+      lastError = `Attestation failed for ${model}: ${error instanceof Error ? error.message : String(error)}`;
     }
-    const body = (await response.json()) as {
-      model_attestations?: { signing_public_key?: string }[];
-    };
-    const candidates = body.model_attestations ?? [];
-    const key = candidates.find((c) => typeof c.signing_public_key === "string")?.signing_public_key;
-    if (!key) {
-      lastError = `No signing_public_key for ${model}`;
-      continue;
-    }
-    // Full Intel/NVIDIA quote verification is still TODO; key is taken from first candidate like the probe.
-    return { model, modelPubKeyHex: key, nonce };
   }
   throw new Error(lastError);
 }
@@ -182,11 +211,13 @@ export async function streamChatCompletion(options: {
   let text = "";
   const toolMap = new Map<number, { id: string; name: string; arguments: string }>();
 
+  // Every streamed field must decrypt with our key. A field that does not is either tampering or
+  // a reply that did not come from the attested model, so the whole answer is rejected.
   const tryDecrypt = async (value: string) => {
     try {
       return await decryptFromModel(value, keys.xSecret);
     } catch {
-      return "";
+      throw new Error("A reply field did not decrypt with this session's key; the answer was discarded.");
     }
   };
 

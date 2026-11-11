@@ -1,19 +1,24 @@
 import { NextResponse } from "next/server";
+import {
+  checkAttestationQuery,
+  checkChatBody,
+  checkChatHeaders,
+  checkSignatureQuery,
+  resolveProxyRoute,
+} from "@/lib/advisor/proxyPolicy";
 
 /**
  * Blind proxy to NEAR AI Cloud. Adds our API key; does not log request/response bodies.
  * Browser talks to /agent/api/near/v1/... (basePath /agent).
+ * Only E2EE chat to our advisor models, their attestation reports and response signatures
+ * pass (src/lib/advisor/proxyPolicy.ts); everything else is refused so the key cannot be
+ * spent on other models or plaintext prompts.
  */
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UPSTREAM = "https://cloud-api.near.ai";
-const ALLOWED = new Set([
-  "v1/chat/completions",
-  "v1/attestation/report",
-  "v1/models",
-]);
 
 const PASS_HEADERS = [
   "content-type",
@@ -26,9 +31,11 @@ const PASS_HEADERS = [
   "x-no-aliasing",
 ] as const;
 
+// Per serverless instance. The key's spend_limit in the NEAR AI dashboard is the hard cap.
 const hits = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 40;
 const RATE_WINDOW_MS = 60_000;
+const HITS_MAX_ENTRIES = 10_000;
 
 function clientIp(request: Request): string {
   return (
@@ -42,6 +49,7 @@ function rateLimited(ip: string): boolean {
   const now = Date.now();
   const row = hits.get(ip);
   if (!row || now >= row.resetAt) {
+    if (hits.size >= HITS_MAX_ENTRIES) hits.clear();
     hits.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
     return false;
   }
@@ -49,42 +57,43 @@ function rateLimited(ip: string): boolean {
   return row.count > RATE_LIMIT;
 }
 
-function resolvePath(parts: string[]): string | null {
-  const path = parts.join("/");
-  if (ALLOWED.has(path)) return path;
-  if (path.startsWith("v1/signature/")) return path;
-  return null;
+function refuse(status: number, error: string) {
+  return NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
 }
 
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const key = process.env.NEAR_AI_API_KEY?.trim();
-  if (!key) {
-    return NextResponse.json({ error: "NEAR_AI_API_KEY is not configured" }, { status: 503 });
-  }
+  if (!key) return refuse(503, "NEAR_AI_API_KEY is not configured");
 
-  const ip = clientIp(request);
-  if (rateLimited(ip)) {
-    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
-  }
+  if (rateLimited(clientIp(request))) return refuse(429, "Rate limit exceeded");
 
   const { path: parts } = await context.params;
-  const allowed = resolvePath(parts ?? []);
-  if (!allowed) {
-    return NextResponse.json({ error: "Path not allowed" }, { status: 404 });
-  }
+  const route = resolveProxyRoute(parts ?? [], request.method);
+  if (!route) return refuse(404, "Path not allowed");
 
   const incoming = new URL(request.url);
-  const upstreamUrl = `${UPSTREAM}/${allowed}${incoming.search}`;
+  let body: string | undefined;
+  if (route.kind === "chat") {
+    const headerCheck = checkChatHeaders(request.headers);
+    if (!headerCheck.ok) return refuse(headerCheck.status, headerCheck.error);
+    body = await request.text();
+    const bodyCheck = checkChatBody(body, request.headers.get("x-encrypt-all-fields") === "true");
+    if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
+  } else {
+    const queryCheck =
+      route.kind === "attestation"
+        ? checkAttestationQuery(incoming.searchParams)
+        : checkSignatureQuery(incoming.searchParams);
+    if (!queryCheck.ok) return refuse(queryCheck.status, queryCheck.error);
+  }
+
+  const upstreamPath = route.kind === "signature" ? `v1/signature/${route.id}` : parts.join("/");
+  const upstreamUrl = `${UPSTREAM}/${upstreamPath}${incoming.search}`;
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${key}`);
   for (const name of PASS_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
-  }
-
-  let body: ArrayBuffer | undefined;
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    body = await request.arrayBuffer();
   }
 
   let upstream: Response;
@@ -96,7 +105,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
       cache: "no-store",
     });
   } catch {
-    return NextResponse.json({ error: "Upstream unreachable" }, { status: 502 });
+    return refuse(502, "Upstream unreachable");
   }
 
   const out = new Headers();
@@ -114,4 +123,3 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
 
 export const GET = proxy;
 export const POST = proxy;
-export const OPTIONS = proxy;
