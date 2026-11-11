@@ -5,6 +5,20 @@
 > Дедлайн хакатона: подача **2026-11-14 23:59 UTC**. Рабочий E2EE-чат на `yieldai.app/agent` нужен
 > **к 2026-11-11** — если не успеваем, подаём депозит через Intents, а чат остаётся слайдом.
 
+## 0. Что уже есть на 2026-11-11 и что встроить в чат (Рустаму)
+
+В `feat/private-advisor-desk` слиты #8–#11 и `feat/safe-panel`. Работает без чата, кнопками слева:
+
+| Что | Где | Как вызвать из чата |
+|---|---|---|
+| Сводка сейфа: кошелёк, свободный USDC, Kamino по текущей цене доли, прибыль, начисленная комиссия | `GET /agent/api/safe-summary?owner=`, `src/lib/agent/safeSummary*.ts` | инструмент `get_safe_summary` → компактный текст в результат инструмента |
+| Создать сейф, депозит из кошелька в сейф или сразу в Kamino, свободный USDC → Kamino, вывод свободного USDC, выход из Kamino (redeem → return, две подписи) | `src/components/agent/SafePanel.tsx`, планы и проверка — `src/lib/agent/safePlans.ts` (`request*Plan`, `signAndSendPlan`, `checkPlanTransaction`) | `propose_plan` / `show_action_card` → карточка вызывает те же `request*Plan` + `signAndSendPlan`. Транзакцию строит Solana Safe API, браузер проверяет её до подписи — не обходить |
+| Депозит через NEAR Intents 1-Click | `IntentsDepositPanel.tsx`, `chatDeposit.ts` | уже есть в карточке `ActionCard` |
+| AI-кредиты: вход подписью, бесплатный лимит пула, бюджет из дохода сейфа (комиссия программы с прибыли Kamino), покупка любым токеном | `src/lib/credits/*`, `/agent/api/session`, `/agent/api/credits*`, `CreditsPanel.tsx` | баланс показывать в чате; при 402 от прокси — кнопка «Top up» |
+| Подпись каждого ответа и панель «что ушло из браузера» | `verifyAnswer` в `nearProxy.ts`, `AnswerProofLine.tsx` | уже под каждым ответом |
+
+Правила остаются: модель ничего не подписывает, план проверяется кодом, транзакция — проверкой `checkPlanTransaction`.
+
 ## 1. Что строим и главный тезис
 
 Советник Yield AI на странице `yieldai.app/agent`: пользователь с Phantom (или Aptos-кошельком) спрашивает

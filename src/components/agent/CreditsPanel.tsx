@@ -168,7 +168,8 @@ export function CreditsPanel() {
               AI credits: <strong>{usd(balance?.availableUsd ?? 0)}</strong>
               <span className="text-muted-foreground">
                 {" "}
-                · free left {usd(balance?.freeLeftUsd ?? 0)} · bought {usd(Math.max(0, balance?.purchasedLeftUsd ?? 0))}
+                · free left {usd(balance?.freeLeftUsd ?? 0)} · from your Safe yield {usd(balance?.yieldLeftUsd ?? 0)} · bought{" "}
+                {usd(Math.max(0, balance?.purchasedLeftUsd ?? 0))}
               </span>
             </span>
             {state.purchasesEnabled ? (

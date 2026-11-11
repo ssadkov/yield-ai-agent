@@ -2,7 +2,9 @@
  * Owner-signed Solana Safe actions built by the Solana Safe API (yield-ai-os-sol `web`,
  * `/api/mobile/v1/*`, reached through `/agent/api/solana-safe/*`):
  * - create the Safe, optionally with a first USDC deposit in the same transaction;
- * - put idle Safe USDC into the Kamino USDC vault.
+ * - deposit USDC from the wallet, into the Safe or straight into Kamino;
+ * - put idle Safe USDC into the Kamino USDC vault;
+ * - exit Kamino (redeem, then return the USDC to the wallet) and withdraw idle USDC.
  *
  * The API returns an unsigned v0 transaction. Before the wallet sees it, `checkPlanTransaction`
  * requires: the owner is the only signer and the fee payer; every instruction belongs to the
@@ -32,6 +34,8 @@ const DISCRIMINATORS = {
   deposit: [242, 35, 198, 137, 82, 225, 242, 182],
   set_allocation: [119, 81, 22, 4, 114, 187, 23, 145],
   kamino_deposit: [237, 8, 188, 187, 115, 99, 49, 85],
+  withdraw: [183, 18, 70, 156, 148, 109, 161, 34],
+  kamino_withdraw: [199, 101, 41, 45, 213, 98, 224, 200],
 } as const;
 type SafeInstruction = keyof typeof DISCRIMINATORS;
 
@@ -40,7 +44,9 @@ export type PlanKind =
   | "create_safe_and_deposit"
   | "deposit"
   | "kamino_deposit"
-  | "kamino_deposit_from_wallet";
+  | "kamino_deposit_from_wallet"
+  | "withdraw"
+  | "kamino_redeem";
 
 /** Safe instructions each plan may contain, in order. */
 const EXPECTED: Record<PlanKind, SafeInstruction[]> = {
@@ -52,33 +58,46 @@ const EXPECTED: Record<PlanKind, SafeInstruction[]> = {
   kamino_deposit: ["set_allocation", "kamino_deposit", "set_allocation"],
   // Same, with the wallet → Safe deposit in the same transaction.
   kamino_deposit_from_wallet: ["set_allocation", "deposit", "kamino_deposit", "set_allocation"],
+  // Idle Safe USDC back to the owner's own USDC account (also the "return" step after a Kamino exit).
+  withdraw: ["withdraw"],
+  // Redeem Kamino shares into the Safe's USDC; the program sends its performance fee to the treasury.
+  kamino_redeem: ["kamino_withdraw"],
 };
 
 /**
- * The only non-Safe instruction a plan may carry: idempotently creating the Safe's own USDC
- * account before a deposit, paid by the owner. Anything else from the ATA program is refused.
+ * The only non-Safe instruction a plan may carry: idempotently creating a USDC account, paid by
+ * the owner, for exactly one expected holder — the Safe before a deposit, the owner before a
+ * withdrawal, the fee treasury before a Kamino exit. Anything else from the ATA program is refused.
  */
-function checkSafeUsdcAccountCreation(
+function checkUsdcAccountCreation(
   ix: { accountKeyIndexes: number[]; data: Uint8Array },
   keys: PublicKey[],
-  owner: PublicKey
+  owner: PublicKey,
+  holder: PublicKey
 ): void {
   const at = (i: number) => {
     const key = keys[ix.accountKeyIndexes[i]];
     if (!key) throw new PlanCheckError("Account creation uses a lookup-table account.");
     return key;
   };
-  const safe = safeAddress(owner);
   const isCreateIdempotent = ix.data.length === 1 && ix.data[0] === 1;
   if (
     !isCreateIdempotent ||
     !at(0).equals(owner) ||
-    !at(1).equals(usdcAta(safe)) ||
-    !at(2).equals(safe) ||
+    !at(1).equals(usdcAta(holder)) ||
+    !at(2).equals(holder) ||
     !at(3).equals(USDC_MINT)
   ) {
-    throw new PlanCheckError("The plan creates a token account other than your Safe's USDC account.");
+    throw new PlanCheckError("The plan creates a token account other than the expected USDC account.");
   }
+}
+
+/** Whose USDC account a plan of this kind may create, if any. */
+function allowedAccountHolder(kind: PlanKind, owner: PublicKey, treasury?: PublicKey): PublicKey | null {
+  if (kind === "deposit") return safeAddress(owner);
+  if (kind === "withdraw") return owner;
+  if (kind === "kamino_redeem") return treasury ?? null;
+  return null;
 }
 
 export type PlanStep = {
@@ -90,13 +109,19 @@ export type PlanStep = {
 };
 
 export type SafePlan = {
-  status: "ready" | "already_exists";
+  status: "ready" | "already_exists" | "empty" | "redeemed";
   amountRaw?: string;
   initialDepositRaw?: string;
   blockhash?: string;
   lastValidBlockHeight?: number;
   steps: PlanStep[];
   cost?: { totalLamports: string; walletSolLamports: string };
+  /** Kamino redeem: shares in this transaction, and what is left of the selection afterwards. */
+  legSharesRaw?: string;
+  remainingTargetSharesRaw?: string;
+  performanceFeeBps?: number;
+  /** Kamino return: USDC the redemption added to the Safe, after the performance fee. */
+  netUsdc?: string;
 };
 
 export class PlanCheckError extends Error {
@@ -123,7 +148,7 @@ function readU64(data: Uint8Array, offset: number): bigint {
  */
 export function checkPlanTransaction(
   base64: string,
-  expected: { owner: PublicKey; kind: PlanKind; amountRaw?: bigint }
+  expected: { owner: PublicKey; kind: PlanKind; amountRaw?: bigint; treasury?: PublicKey }
 ): VersionedTransaction {
   const tx = VersionedTransaction.deserialize(Buffer.from(base64, "base64"));
   const message = tx.message;
@@ -137,8 +162,10 @@ export function checkPlanTransaction(
     const program = keys[ix.programIdIndex];
     if (!program) throw new PlanCheckError("Instruction program is not a static account.");
     if (program.equals(ComputeBudgetProgram.programId)) continue;
-    if (program.equals(ASSOCIATED_TOKEN_PROGRAM_ID) && expected.kind === "deposit") {
-      checkSafeUsdcAccountCreation(ix, keys, expected.owner);
+    if (program.equals(ASSOCIATED_TOKEN_PROGRAM_ID)) {
+      const holder = allowedAccountHolder(expected.kind, expected.owner, expected.treasury);
+      if (!holder) throw new PlanCheckError("This plan must not create token accounts.");
+      checkUsdcAccountCreation(ix, keys, expected.owner, holder);
       continue;
     }
     if (!program.equals(SAFE_PROGRAM_ID)) {
@@ -164,7 +191,13 @@ export function checkPlanTransaction(
       const allowedCount = Buffer.from(call.data).readUInt32LE(56);
       if (allowedCount !== 0) throw new PlanCheckError("New Safe must start with an empty program allowlist.");
     }
-    if (call.name === "deposit" || call.name === "kamino_deposit") {
+    if (
+      call.name === "deposit" ||
+      call.name === "kamino_deposit" ||
+      call.name === "withdraw" ||
+      call.name === "kamino_withdraw"
+    ) {
+      // u64 amount (USDC base units; Kamino shares for kamino_withdraw) right after the discriminator.
       if (expected.amountRaw === undefined || readU64(call.data, 8) !== expected.amountRaw) {
         throw new PlanCheckError("Plan amount differs from the amount you entered.");
       }
@@ -232,20 +265,54 @@ export function requestKaminoDepositPlan(
   });
 }
 
+/** Idle Safe USDC to the owner's wallet; "all" takes everything idle. */
+export function requestWithdrawPlan(address: PublicKey, amountUsdc: string | "all"): Promise<SafePlan> {
+  return postPlan("withdrawals/plan", { owner: owner(address), cluster: "mainnet", amount: amountUsdc });
+}
+
+/** Step 1 of a Kamino exit: redeem a percent ("25", "100.00") of the Safe's shares into Safe USDC. */
+export function requestKaminoRedeemPlan(address: PublicKey, percent: string): Promise<SafePlan> {
+  return postPlan("protocols/kamino/withdrawals/plan", {
+    owner: owner(address),
+    cluster: "mainnet",
+    phase: "redeem",
+    percent,
+  });
+}
+
+/** Step 2: send exactly what that redemption added to the Safe on to the wallet. */
+export function requestKaminoReturnPlan(address: PublicKey, redemptionSignature: string): Promise<SafePlan> {
+  return postPlan("protocols/kamino/withdrawals/plan", {
+    owner: owner(address),
+    cluster: "mainnet",
+    phase: "return",
+    redemptionSignature,
+  });
+}
+
+/** The fee treasury from the Safe program's config account (bytes 40..72 after the admin key). */
+export async function readSafeTreasury(connection: Connection): Promise<PublicKey> {
+  const [config] = PublicKey.findProgramAddressSync([Buffer.from("config")], SAFE_PROGRAM_ID);
+  const info = await connection.getAccountInfo(config, "confirmed");
+  if (!info || !info.owner.equals(SAFE_PROGRAM_ID) || info.data.length < 75) throw new Error("Safe config is unavailable");
+  return new PublicKey(info.data.subarray(40, 72));
+}
+
 /** Check the plan, have the wallet sign and send it, and wait for confirmation. */
 export async function signAndSendPlan(options: {
   plan: SafePlan;
   owner: PublicKey;
   kind: PlanKind;
   amountRaw?: bigint;
+  treasury?: PublicKey;
   connection: Connection;
   sendTransaction: (tx: VersionedTransaction, connection: Connection) => Promise<string>;
 }): Promise<string> {
-  const { plan, owner: wallet, kind, amountRaw, connection, sendTransaction } = options;
+  const { plan, owner: wallet, kind, amountRaw, treasury, connection, sendTransaction } = options;
   if (plan.status !== "ready" || plan.steps.length !== 1) {
     throw new Error(plan.status === "already_exists" ? "Your Safe already exists." : "The Safe API returned no transaction.");
   }
-  const tx = checkPlanTransaction(plan.steps[0].transaction, { owner: wallet, kind, amountRaw });
+  const tx = checkPlanTransaction(plan.steps[0].transaction, { owner: wallet, kind, amountRaw, treasury });
   const signature = await sendTransaction(tx, connection);
   if (plan.blockhash && plan.lastValidBlockHeight) {
     const result = await connection.confirmTransaction(

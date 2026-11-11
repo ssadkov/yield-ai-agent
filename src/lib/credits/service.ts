@@ -10,6 +10,16 @@ import {
   unpricedUsage,
   type Purchase,
 } from "./db.ts";
+import { loadSafeSummary } from "../agent/safeSummary.server.ts";
+
+/** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
+export async function yieldBudgetUsd(wallet: string): Promise<number> {
+  try {
+    return (await loadSafeSummary(wallet)).accruedFeeUsdc;
+  } catch {
+    return 0;
+  }
+}
 
 export const ONE_CLICK = "https://1click.chaindefuser.com/v0";
 const SOLANA_USDC = "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near";
@@ -64,8 +74,18 @@ export async function reconcileCosts(): Promise<number> {
 
 export async function walletBalance(wallet: string): Promise<CreditBalance> {
   await reconcileCosts().catch(() => 0);
-  const [purchased, spend] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet)]);
-  return computeBalance({ freeMonthlyUsd: freeMonthlyUsd(), purchasedUsd: purchased, spendByMonth: spend, now: new Date() });
+  const [purchased, spend, fromYield] = await Promise.all([
+    purchasedUsd(wallet),
+    spendByMonth(wallet),
+    yieldBudgetUsd(wallet),
+  ]);
+  return computeBalance({
+    freeMonthlyUsd: freeMonthlyUsd(),
+    yieldUsd: fromYield,
+    purchasedUsd: purchased,
+    spendByMonth: spend,
+    now: new Date(),
+  });
 }
 
 export async function walletSummary(wallet: string): Promise<{ balance: CreditBalance; purchases: Purchase[] }> {

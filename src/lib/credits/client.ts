@@ -85,6 +85,7 @@ export type CreditsState = {
   paymentAssets?: PaymentAsset[];
   balance?: {
     freeLeftUsd: number;
+    yieldLeftUsd: number;
     purchasedLeftUsd: number;
     availableUsd: number;
     spentThisMonthUsd: number;

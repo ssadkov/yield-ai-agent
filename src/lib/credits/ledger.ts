@@ -1,10 +1,14 @@
 /**
  * Advisor credit balance for one wallet, in dollars of NEAR AI usage.
  *
- * Sources: a monthly free allowance funded by the staked AI pool, and credits the wallet bought
- * through NEAR Intents 1-Click. Spending is the real NEAR AI cost of each request (or an
- * estimate until billing reports it). The free allowance is used first each month; only what a
- * month spends above it comes out of purchased credits, so paid credits never pay for free usage.
+ * Sources, in the order they are spent:
+ * 1. a monthly free allowance funded by the staked AI pool;
+ * 2. the wallet's own Safe yield: the performance fee the Safe program has accrued on its Kamino
+ *    gain (collected on exit, so it is granted before it is realized);
+ * 3. credits bought through NEAR Intents 1-Click.
+ * Spending is the real NEAR AI cost of each request (or an estimate until billing reports it).
+ * Only what a month spends above the free allowance draws on yield, then on purchases, so paid
+ * credits are used last.
  */
 
 export type MonthSpend = { month: string; usd: number };
@@ -12,6 +16,8 @@ export type MonthSpend = { month: string; usd: number };
 export type CreditBalance = {
   freeMonthlyUsd: number;
   freeLeftUsd: number;
+  yieldUsd: number;
+  yieldLeftUsd: number;
   purchasedUsd: number;
   purchasedLeftUsd: number;
   spentThisMonthUsd: number;
@@ -25,11 +31,14 @@ export function monthKey(date: Date): string {
 
 export function computeBalance(input: {
   freeMonthlyUsd: number;
+  /** Accrued performance fee on the wallet's Safe yield, in dollars. */
+  yieldUsd?: number;
   purchasedUsd: number;
   spendByMonth: readonly MonthSpend[];
   now: Date;
 }): CreditBalance {
   const { freeMonthlyUsd, purchasedUsd, spendByMonth, now } = input;
+  const yieldUsd = Math.max(0, input.yieldUsd ?? 0);
   const current = monthKey(now);
   let paidUsed = 0;
   let spentThisMonth = 0;
@@ -39,14 +48,18 @@ export function computeBalance(input: {
     if (row.month === current) spentThisMonth += usd;
   }
   const freeLeft = Math.max(0, freeMonthlyUsd - spentThisMonth);
-  const purchasedLeft = purchasedUsd - paidUsed;
+  const fromYield = Math.min(paidUsed, yieldUsd);
+  const yieldLeft = yieldUsd - fromYield;
+  const purchasedLeft = purchasedUsd - (paidUsed - fromYield);
   return {
     freeMonthlyUsd,
     freeLeftUsd: freeLeft,
+    yieldUsd,
+    yieldLeftUsd: yieldLeft,
     purchasedUsd,
     purchasedLeftUsd: purchasedLeft,
     spentThisMonthUsd: spentThisMonth,
-    availableUsd: freeLeft + Math.max(0, purchasedLeft),
+    availableUsd: freeLeft + yieldLeft + Math.max(0, purchasedLeft),
   };
 }
 

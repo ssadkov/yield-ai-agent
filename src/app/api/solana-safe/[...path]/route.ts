@@ -19,6 +19,9 @@ const ROUTES: { method: "GET" | "POST"; path: RegExp }[] = [
   { method: "POST", path: /^safes\/creation-plan$/ },
   { method: "POST", path: /^deposits\/plan$/ },
   { method: "POST", path: /^protocols\/kamino\/deposits\/plan$/ },
+  { method: "POST", path: /^withdrawals\/plan$/ },
+  { method: "POST", path: /^protocols\/kamino\/withdrawals\/plan$/ },
+  { method: "GET", path: /^protocols\/kamino\/position$/ },
   { method: "GET", path: /^transactions\/[1-9A-HJ-NP-Za-km-z]{64,88}$/ },
 ];
 
