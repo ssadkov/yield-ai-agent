@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/agent/ThemeToggle";
+import { SHOW_APTOS } from "@/lib/agent/features";
 
 function truncateAddress(address: string | null | undefined): string {
   if (!address) return "Unknown";
@@ -142,7 +143,7 @@ export function AgentHeader({
                         />
                       </div>
                     ) : null}
-                    {aptosAddress ? (
+                    {SHOW_APTOS && aptosAddress ? (
                       <div className="py-3">
                         <CopyRow label={`Aptos · ${aptosKind}`} value={aptosAddress} />
                       </div>
@@ -162,7 +163,7 @@ export function AgentHeader({
                         </button>
                       </div>
                     ) : null}
-                    {!aptosAddress ? (
+                    {SHOW_APTOS && !aptosAddress ? (
                       <div className="py-2">
                         <button
                           type="button"
@@ -206,14 +207,16 @@ export function AgentHeader({
                 {pending ? "Connecting…" : <span className="sm:hidden">Connect</span>}
                 {pending ? null : <span className="hidden sm:inline">Connect Wallet</span>}
               </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={onConnectAptos}
-                className="hidden h-9 items-center px-1 text-xs font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex disabled:opacity-50"
-              >
-                Aptos
-              </button>
+              {SHOW_APTOS ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={onConnectAptos}
+                  className="hidden h-9 items-center px-1 text-xs font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex disabled:opacity-50"
+                >
+                  Aptos
+                </button>
+              ) : null}
             </div>
           )}
         </div>

@@ -30,6 +30,7 @@ import {
   derivedAptosAddress,
   sameAptosAddress,
 } from "@/lib/agent/aptosDerived";
+import { SHOW_APTOS } from "@/lib/agent/features";
 
 /** Test-sized deposits only, while the flow is unproven on mainnet. */
 const MIN_RAW = BigInt(1_000_000);
@@ -464,6 +465,7 @@ export function IntentsDepositPanel({
                   ) : null}
                 </button>
 
+                {SHOW_APTOS ? (
                 <button
                   type="button"
                   disabled={!aptos?.formulaVerified}
@@ -492,6 +494,7 @@ export function IntentsDepositPanel({
                     </p>
                   )}
                 </button>
+                ) : null}
               </div>
             )}
           </div>
