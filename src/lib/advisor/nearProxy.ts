@@ -66,15 +66,16 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
  * The SDK is loaded on first use so it stays out of the page's initial bundle.
  */
 export async function pickAttestedModel(candidates: readonly AdvisorModel[]): Promise<AttestedModel> {
-  let lastError = "No model to verify";
+  const errors: string[] = [];
   for (const model of candidates) {
     try {
       return await verifyModel(model);
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      errors.push(error instanceof Error ? error.message : String(error));
     }
   }
-  throw new Error(lastError);
+  // The primary model's reason is the one worth reading; the fallback usually fails the same way.
+  throw new Error(errors[0] ?? "No model to verify");
 }
 
 async function verifyModel(preferred: AdvisorModel): Promise<AttestedModel> {
