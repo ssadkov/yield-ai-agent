@@ -19,9 +19,9 @@ import { DEFAULT_ADVISOR_MODEL } from "../advisor/models.ts";
 import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
 
 /** The wallet's Safe, or null when it cannot be read right now. */
-async function safeOrNull(wallet: string): Promise<SafeSummary | null> {
+async function safeOrNull(wallet: string, scanFees = false): Promise<SafeSummary | null> {
   try {
-    return await loadSafeSummary(wallet);
+    return await loadSafeSummary(wallet, false, scanFees);
   } catch {
     return null;
   }
@@ -29,7 +29,7 @@ async function safeOrNull(wallet: string): Promise<SafeSummary | null> {
 
 /** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
 export async function yieldBudgetUsd(wallet: string): Promise<number> {
-  return (await safeOrNull(wallet))?.accruedFeeUsdc ?? 0;
+  return (await safeOrNull(wallet))?.aiBudgetUsdc ?? 0;
 }
 
 /** USDC the Safe holds, idle or in Kamino. */
@@ -121,7 +121,7 @@ async function balanceFrom(wallet: string, safe: SafeSummary | null): Promise<Cr
   const [purchased, spend] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet)]);
   return computeBalance({
     freeMonthlyUsd: freeMonthlyUsd(),
-    yieldUsd: safe?.accruedFeeUsdc ?? 0,
+    yieldUsd: safe?.aiBudgetUsdc ?? 0,
     purchasedUsd: purchased,
     spendByMonth: spend,
     now: new Date(),
@@ -169,7 +169,7 @@ export async function walletSummary(wallet: string): Promise<{
 }> {
   // Billed costs first, so usage totals and the balance read the same numbers.
   await reconcileCosts().catch(() => 0);
-  const safe = await safeOrNull(wallet);
+  const safe = await safeOrNull(wallet, true);
   const [balance, purchases, usage, price] = await Promise.all([
     balanceFrom(wallet, safe),
     listPurchases(wallet),

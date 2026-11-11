@@ -17,6 +17,10 @@ import {
 import { formatUsdc, panelConnections, parseUsdc, withFallback } from "@/lib/agent/solanaSafe";
 import type { SafeSummary } from "@/lib/agent/safeSummary";
 import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
+import { TickingNumber } from "@/components/agent/TickingNumber";
+import { TOKENS_PER_USD, TYPICAL_REQUEST_USD } from "@/lib/advisor/aiPool";
+
+const SECONDS_PER_YEAR = 365 * 24 * 3600;
 
 const KAMINO_MIN_RAW = BigInt(1_000_000);
 const KAMINO_ROW_ID = "solana:kamino_usdc";
@@ -269,6 +273,12 @@ export function EarnPanel() {
     "inline-flex h-8 items-center justify-center rounded-full border border-border px-3 text-[13px] font-medium hover:bg-muted disabled:opacity-40";
   const label = (id: string, text: string) => (busy === id ? "Sign in wallet…" : text);
   const apyText = apy !== null ? `~${apy.toFixed(1)}% APY` : "variable APY";
+  // What the fee on Kamino's yield buys, live: dollars a second → GLM output tokens.
+  const feeRate = (s?.performanceFeeBps ?? 0) / 10_000;
+  const feeUsdPerSecond = (usdc: number) => (apy !== null ? (usdc * (apy / 100) * feeRate) / SECONDS_PER_YEAR : 0);
+  const tokensPerSecond = feeUsdPerSecond(inKamino) * TOKENS_PER_USD;
+  const requestsPerMonth = Math.round((feeUsdPerSecond(inKamino) * 30 * 86_400) / TYPICAL_REQUEST_USD);
+  const perThousandRequests = Math.round((feeUsdPerSecond(1000) * 30 * 86_400) / TYPICAL_REQUEST_USD);
   const feeText = s?.performanceFeeBps ? `${s.performanceFeeBps / 100}%` : null;
 
   const errorLine = error ? (
@@ -289,10 +299,26 @@ export function EarnPanel() {
       ) : hasMoney ? (
         <>
           <p className="mt-3 text-[26px] font-semibold tabular-nums tracking-tight">${usd(total)}</p>
-          <p className="text-[13px] text-muted-foreground">
-            earned +${usd(s.kamino.gainUsdc, 6)}
-            {s.accruedFeeUsdc > 0 ? ` · pays $${usd(s.accruedFeeUsdc, 6)} of your AI` : ""}
-          </p>
+          <p className="text-[13px] text-muted-foreground">earned +${usd(s.kamino.gainUsdc, 6)}</p>
+          {feeRate > 0 ? (
+            <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2.5">
+              <p className="text-[12px] text-muted-foreground">AI tokens your yield has paid for</p>
+              <TickingNumber
+                base={s.aiBudgetUsdc * TOKENS_PER_USD}
+                perSecond={tokensPerSecond}
+                since={Date.parse(s.updatedAt)}
+                className="block text-[22px] font-semibold tracking-tight text-emerald-700 dark:text-emerald-300"
+              />
+              <p
+                className="text-[12px] text-muted-foreground"
+                title="Output tokens of GLM 5.3 Flash at $0.50 per 1M; a typical advisor request costs about $0.001."
+              >
+                {tokensPerSecond > 0
+                  ? `+${Math.round(tokensPerSecond * 86_400).toLocaleString("en-US")} a day · ≈ ${requestsPerMonth.toLocaleString("en-US")} requests a month`
+                  : "Grows while your USDC is in Kamino."}
+              </p>
+            </div>
+          ) : null}
           {idle > 0 ? (
             <p className="mt-2 text-[13px] text-muted-foreground">
               ${usd(idle, 6)} is not earning yet.{" "}
@@ -304,7 +330,10 @@ export function EarnPanel() {
         </>
       ) : (
         <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
-          Kamino lending, withdraw anytime. You keep the keys; the fee on what you earn pays for your private AI.
+          Kamino lending, withdraw anytime. You keep the keys; the fee on what you earn pays for your private AI
+          {perThousandRequests > 0
+            ? `: every $1,000 here buys ≈ ${perThousandRequests.toLocaleString("en-US")} requests a month.`
+            : "."}
         </p>
       )}
 

@@ -26,6 +26,10 @@ export type SafeSummary = {
   performanceFeeBps: number;
   /** performanceFeeBps × gain: what the program will send to the treasury on exit. */
   accruedFeeUsdc: number;
+  /** Fees already sent to the treasury on earlier exits (src/lib/credits/realizedFees.ts). */
+  realizedFeeUsdc: number;
+  /** The owner's AI budget from yield, all time: realized + accrued fees. */
+  aiBudgetUsdc: number;
   totalUsdc: number;
   updatedAt: string;
 };
@@ -47,6 +51,7 @@ export function summarizeSafe(input: {
   position: { sharesRaw?: string; sharesDecimals?: number; principalUsdc?: string } | null;
   tokensPerShare: number;
   performanceFeeBps: number;
+  realizedFeeUsdc?: number;
   now?: Date;
 }): SafeSummary {
   const { owner, state, position, tokensPerShare, performanceFeeBps } = input;
@@ -67,6 +72,8 @@ export function summarizeSafe(input: {
     kamino: { sharesRaw, valueUsdc, principalUsdc, gainUsdc, tokensPerShare },
     performanceFeeBps,
     accruedFeeUsdc: (gainUsdc * performanceFeeBps) / 10_000,
+    realizedFeeUsdc: Math.max(0, input.realizedFeeUsdc ?? 0),
+    aiBudgetUsdc: (gainUsdc * performanceFeeBps) / 10_000 + Math.max(0, input.realizedFeeUsdc ?? 0),
     totalUsdc: idleUsdc + valueUsdc,
     updatedAt: (input.now ?? new Date()).toISOString(),
   };
