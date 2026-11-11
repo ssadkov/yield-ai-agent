@@ -195,7 +195,29 @@ export function ActionCard({ card }: { card: ActionCardData }) {
 
       {tracked ? (
         <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-          {formatChatDepositUsdc(BigInt(tracked.amountRaw))} USDC · tx {shorten(tracked.txSig)}
+          {formatChatDepositUsdc(BigInt(tracked.amountRaw))} USDC · sent{" "}
+          <a
+            href={`https://solscan.io/tx/${tracked.txSig}`}
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-foreground"
+          >
+            {shorten(tracked.txSig)}
+          </a>
+          {status?.swapDetails?.destinationChainTxHashes?.[0]?.hash ? (
+            <>
+              {" · received "}
+              <a
+                href={`https://solscan.io/tx/${status.swapDetails.destinationChainTxHashes[0].hash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                {shorten(status.swapDetails.destinationChainTxHashes[0].hash)}
+              </a>
+              {status.swapDetails.amountOutFormatted ? ` (${status.swapDetails.amountOutFormatted} USDC)` : ""}
+            </>
+          ) : null}
         </p>
       ) : null}
 

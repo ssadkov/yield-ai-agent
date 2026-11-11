@@ -2,6 +2,7 @@
 
 import { SessionPanel } from "@/components/agent/SessionPanel";
 import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
+import { SHOW_APTOS } from "@/lib/agent/features";
 
 function truncateAddress(address: string): string {
   if (address.length <= 12) return address;
@@ -83,7 +84,9 @@ export function WalletSidePanel({
           <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">&gt;&gt; wallet</p>
           <h3 className="mt-1 text-base font-semibold tracking-tight">Connect to continue</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-            Phantom derives an Aptos account for this host. Then you can deposit USDC and talk to the advisor with your Safe in context.
+            {SHOW_APTOS
+              ? "Phantom derives an Aptos account for this host. Then you can deposit USDC and talk to the advisor with your Safe in context."
+              : "Connect a Solana wallet to deposit USDC into your Solana Safe and talk to the advisor with your Safe in context."}
           </p>
           <button
             type="button"
@@ -93,14 +96,16 @@ export function WalletSidePanel({
           >
             {pending ? "Connecting…" : "Connect Solana wallet"}
           </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onConnectAptos}
-            className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          >
-            I have an Aptos wallet
-          </button>
+          {SHOW_APTOS ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onConnectAptos}
+              className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              I have an Aptos wallet
+            </button>
+          ) : null}
         </section>
       ) : null}
 
@@ -117,7 +122,7 @@ export function WalletSidePanel({
                 <dd className="mt-0.5 font-mono text-sm text-foreground">{truncateAddress(solanaAddress)}</dd>
               </div>
             ) : null}
-            {aptosAddress ? (
+            {SHOW_APTOS && aptosAddress ? (
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   Aptos · {aptosKind}
@@ -129,10 +134,13 @@ export function WalletSidePanel({
         </section>
       ) : null}
 
-      {connected ? <SessionPanel aptosAddress={aptosAddress} /> : null}
+      {SHOW_APTOS && connected ? <SessionPanel aptosAddress={aptosAddress} /> : null}
 
       {showDeposit ? (
-        <IntentsDepositPanel aptosAddress={aptosAddress} aptosIsDerived={aptosIsDerived} />
+        <IntentsDepositPanel
+          aptosAddress={SHOW_APTOS ? aptosAddress : null}
+          aptosIsDerived={SHOW_APTOS && aptosIsDerived}
+        />
       ) : null}
     </div>
   );
