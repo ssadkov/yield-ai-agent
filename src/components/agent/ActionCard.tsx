@@ -101,10 +101,10 @@ export function ActionCard({ card }: { card: ActionCardData }) {
   return (
     <div className="gpt-chat-enter rounded-2xl border border-border/70 bg-background/60 p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold tracking-tight text-foreground">
+        <p className="text-[12.5px] font-semibold tracking-tight text-foreground">
           {isDeposit ? "Deposit to Solana Safe" : "Withdraw from Safe"}
         </p>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] tracking-wide text-primary">
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[11.5px] tracking-wide text-primary">
           {isDeposit ? "Wallet · 1-Click" : "USDC"}
         </span>
       </div>
@@ -126,9 +126,9 @@ export function ActionCard({ card }: { card: ActionCardData }) {
               if (phase === "error") setPhase("idle");
               setAmount(event.target.value);
             }}
-            className="h-10 w-full rounded-xl border border-border/80 bg-muted/40 px-3 pr-14 text-sm font-medium tabular-nums text-foreground outline-none transition-colors focus:border-foreground/30 focus:bg-background disabled:opacity-60"
+            className="h-10 w-full rounded-xl border border-border/80 bg-muted/40 px-3 pr-14 text-[15px] font-medium tabular-nums text-foreground outline-none transition-colors focus:border-foreground/30 focus:bg-background disabled:opacity-60"
           />
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[13px] text-muted-foreground">
             USDC
           </span>
         </div>
@@ -173,7 +173,7 @@ export function ActionCard({ card }: { card: ActionCardData }) {
               }
             })();
           }}
-          className="inline-flex h-10 min-w-[6.5rem] shrink-0 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-[0_0_24px_-8px_var(--glow)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+          className="inline-flex h-10 min-w-[6.5rem] shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[15px] font-medium text-primary-foreground shadow-[0_0_24px_-8px_var(--glow)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
         >
           {buttonLabel}
         </button>
@@ -196,22 +196,22 @@ export function ActionCard({ card }: { card: ActionCardData }) {
         />
       ) : null}
 
-      {card.note ? <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{card.note}</p> : null}
+      {card.note ? <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{card.note}</p> : null}
 
       {isDeposit && phase === "idle" ? (
-        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/80">
+        <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground/80">
           “Via NEAR Intents” sends Solana USDC to a one-time 1-Click address that pays your Safe (~1%, a few minutes). Test range: 1–5 USDC.
         </p>
       ) : null}
 
       {statusLine ? (
-        <p className="mt-2 text-[11px] leading-relaxed text-foreground/85" aria-live="polite">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-foreground/85" aria-live="polite">
           {statusLine}
         </p>
       ) : null}
 
       {tracked ? (
-        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+        <p className="mt-1 font-mono text-[11.5px] text-muted-foreground">
           {formatChatDepositUsdc(BigInt(tracked.amountRaw))} USDC · sent{" "}
           <a
             href={`https://solscan.io/tx/${tracked.txSig}`}
@@ -239,11 +239,11 @@ export function ActionCard({ card }: { card: ActionCardData }) {
       ) : null}
 
       {error ? (
-        <p className="mt-2 text-[11px] leading-relaxed text-danger" role="alert">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-danger" role="alert">
           {error}
         </p>
       ) : null}
-      {note ? <p className="mt-2 text-[11px] leading-relaxed text-foreground/80">{note}</p> : null}
+      {note ? <p className="mt-2 text-[12.5px] leading-relaxed text-foreground/80">{note}</p> : null}
 
       {isDeposit && needsSafe ? (
         <CreateSafeStep

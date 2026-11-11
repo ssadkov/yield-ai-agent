@@ -41,7 +41,7 @@ function useOwnerSigner() {
 
 function TxLine({ label, signature }: { label: string; signature: string }) {
   return (
-    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+    <p className="mt-1 font-mono text-[11.5px] text-muted-foreground">
       {label} ·{" "}
       <a href={`https://solscan.io/tx/${signature}`} target="_blank" rel="noreferrer" className="underline">
         {shorten(signature)}
@@ -101,7 +101,7 @@ export function WalletDepositStep({
           type="button"
           disabled={busy !== null || Boolean(signature) || amountRaw === null}
           onClick={() => void deposit(false)}
-          className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-40"
+          className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
         >
           {busy === "safe" ? "Sign…" : "Deposit from wallet"}
         </button>
@@ -109,19 +109,19 @@ export function WalletDepositStep({
           type="button"
           disabled={busy !== null || Boolean(signature) || amountRaw === null || kaminoTooSmall}
           onClick={() => void deposit(true)}
-          className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-medium text-foreground disabled:opacity-40"
+          className="inline-flex h-8 items-center rounded-full border border-border px-3 text-[13px] font-medium text-foreground disabled:opacity-40"
         >
           {busy === "kamino" ? "Sign…" : "Deposit straight into Kamino"}
         </button>
       </div>
-      <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/80">
+      <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground/80">
         USDC from this Solana wallet into your Safe, one signature, no bridge. Kamino needs at least 1 USDC.
       </p>
       {signature ? (
         <TxLine label={signature.intoKamino ? "Deposited into Kamino" : "Deposited into Safe"} signature={signature.sig} />
       ) : null}
       {error ? (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-danger" role="alert">
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-danger" role="alert">
           {error}
         </p>
       ) : null}
@@ -166,7 +166,7 @@ export function CreateSafeStep({
 
   return (
     <div className="mt-2.5 rounded-xl border border-border/70 bg-muted/30 p-2.5">
-      <p className="text-[11px] leading-relaxed text-foreground/85">
+      <p className="text-[12.5px] leading-relaxed text-foreground/85">
         No Solana Safe yet. Creating it is one transaction you sign; Solana charges a little SOL for account rent.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -174,7 +174,7 @@ export function CreateSafeStep({
           type="button"
           disabled={busy !== null || Boolean(signature)}
           onClick={() => void create(false)}
-          className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-40"
+          className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
         >
           {busy === "create" ? "Sign…" : "Create Safe"}
         </button>
@@ -182,17 +182,17 @@ export function CreateSafeStep({
           type="button"
           disabled={busy !== null || Boolean(signature) || amountRaw === null}
           onClick={() => void create(true)}
-          className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-medium text-foreground disabled:opacity-40"
+          className="inline-flex h-8 items-center rounded-full border border-border px-3 text-[13px] font-medium text-foreground disabled:opacity-40"
         >
           {busy === "create_deposit" ? "Sign…" : `Create + deposit ${amountRaw === null ? "" : formatUsdc(amountRaw)} USDC from wallet`}
         </button>
       </div>
-      <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/80">
+      <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground/80">
         “Create Safe” then use Deposit to fund it through NEAR Intents. “Create + deposit” moves USDC straight from this wallet.
       </p>
       {signature ? <TxLine label="Safe created" signature={signature} /> : null}
       {error ? (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-danger" role="alert">
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-danger" role="alert">
           {error}
         </p>
       ) : null}
@@ -251,7 +251,7 @@ export function KaminoStep({ suggestedUsdc }: { suggestedUsdc: number }) {
   if (!owner) return null;
   return (
     <div className="mt-2.5 rounded-xl border border-border/70 bg-muted/30 p-2.5">
-      <p className="text-[11px] leading-relaxed text-foreground/85">
+      <p className="text-[12.5px] leading-relaxed text-foreground/85">
         Put Safe USDC into Kamino (variable APY). You sign once; the funds stay in your Safe’s Kamino position.
         {idleRaw !== null ? ` Idle in Safe: ${formatUsdc(idleRaw)} USDC.` : ""}
       </p>
@@ -266,22 +266,22 @@ export function KaminoStep({ suggestedUsdc }: { suggestedUsdc: number }) {
             setAmount(event.target.value.trim().replace(",", "."));
           }}
           aria-label="USDC to put into Kamino"
-          className="h-8 min-w-0 flex-1 rounded-lg border border-border/80 bg-background px-2.5 text-xs tabular-nums outline-none"
+          className="h-8 min-w-0 flex-1 rounded-lg border border-border/80 bg-background px-2.5 text-[13px] tabular-nums outline-none"
         />
         <button
           type="button"
           disabled={busy || Boolean(signature) || amountRaw === null || tooSmall || tooBig}
           onClick={() => void place()}
-          className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-40"
+          className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
         >
           {busy ? "Sign…" : signature ? "Done" : "Put into Kamino"}
         </button>
       </div>
-      {tooSmall ? <p className="mt-1 text-[10px] text-muted-foreground">Kamino needs at least 1 USDC.</p> : null}
-      {tooBig ? <p className="mt-1 text-[10px] text-muted-foreground">More than the Safe holds.</p> : null}
+      {tooSmall ? <p className="mt-1 text-[11.5px] text-muted-foreground">Kamino needs at least 1 USDC.</p> : null}
+      {tooBig ? <p className="mt-1 text-[11.5px] text-muted-foreground">More than the Safe holds.</p> : null}
       {signature ? <TxLine label="In Kamino" signature={signature} /> : null}
       {error ? (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-danger" role="alert">
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-danger" role="alert">
           {error}
         </p>
       ) : null}

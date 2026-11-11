@@ -12,6 +12,7 @@ import {
   type DerivedWalletChain,
 } from "@/lib/aptosWalletUtils";
 import { getSolanaWalletAddress } from "@/lib/wallet/getSolanaWalletAddress";
+import { SHOW_APTOS } from "@/lib/agent/features";
 
 const SOLANA_SUFFIX = " (Solana)";
 
@@ -31,6 +32,9 @@ const APTOS_ORDER = ["petra", "nightly", "pontem wallet", "okx wallet", "backpac
 
 /** Not-installed rows we still offer an install link for. Installed wallets always show. */
 const SOLANA_INSTALL = new Set(["phantom", "solflare", "backpack"]);
+/** Multi-chain wallets that confuse a Solana-only demo; left out of the list. */
+const SOLANA_HIDDEN = new Set(["metamask"]);
+const INSTALLED_DETAIL = SHOW_APTOS ? "Derives an Aptos account" : "Installed";
 const APTOS_INSTALL = new Set(["petra", "nightly", "pontem wallet", "okx wallet", "backpack"]);
 
 /** Shown when the adapter has not registered the wallet at all (no extension in this browser). */
@@ -169,12 +173,13 @@ export function useAgentWallets() {
       if (!wallet.name.endsWith(SOLANA_SUFFIX)) continue;
       const label = derivedWalletSourceName(wallet.name);
       const key = label.toLowerCase();
+      if (SOLANA_HIDDEN.has(key)) continue;
       const installed = wallet.readyState === AptosReadyState.Installed;
       if (!installed && !SOLANA_INSTALL.has(key)) continue;
       byId.set(wallet.name, {
         id: wallet.name,
         label,
-        detail: installed ? "Derives an Aptos account" : "Not installed",
+        detail: installed ? INSTALLED_DETAIL : "Not installed",
         icon: wallet.icon,
         installed,
         installUrl: wallet.url,
@@ -185,7 +190,7 @@ export function useAgentWallets() {
     for (const wallet of solana.wallets ?? []) {
       const label = wallet.adapter.name;
       const key = label.toLowerCase();
-      if (seenSolana.has(key)) continue;
+      if (seenSolana.has(key) || SOLANA_HIDDEN.has(key)) continue;
       seenSolana.add(key);
       const installed = wallet.readyState === SolanaReadyState.Installed;
       if (!installed && !SOLANA_INSTALL.has(key)) continue;
@@ -196,7 +201,7 @@ export function useAgentWallets() {
           ...existing,
           icon: existing.icon || wallet.adapter.icon,
           installed: existing.installed || installed,
-          detail: existing.installed || installed ? "Derives an Aptos account" : existing.detail,
+          detail: existing.installed || installed ? INSTALLED_DETAIL : existing.detail,
           installUrl: existing.installUrl || wallet.adapter.url,
         });
         continue;
@@ -204,7 +209,7 @@ export function useAgentWallets() {
       byId.set(id, {
         id,
         label,
-        detail: installed ? "Derives an Aptos account" : "Not installed",
+        detail: installed ? INSTALLED_DETAIL : "Not installed",
         icon: wallet.adapter.icon,
         installed,
         installUrl: wallet.adapter.url,

@@ -58,14 +58,27 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 /**
- * Verify NEAR attestation for the model the user selected (or the default).
- * `@nearai/inference-sdk` checks every candidate: Intel TDX quote and TCB status, report data
+ * Use the first of `candidates` whose NEAR attestation verifies, with the E2EE key bound to it.
+ * `@nearai/inference-sdk` checks every attestation: Intel TDX quote and TCB status, report data
  * binding our fresh nonce and the signer, RTMR3 event log, MRCONFIGID, and NVIDIA GPU evidence
- * when present (collateral via NEAR AI's CORS proxies). Every candidate must pass and they must
- * agree on the key; otherwise we never send anything to this model.
+ * when present (collateral via NEAR AI's CORS proxies). Every attestation must pass and they must
+ * agree on the key; otherwise we try the next candidate and never send anything to this one.
  * The SDK is loaded on first use so it stays out of the page's initial bundle.
  */
-export async function pickAttestedModel(preferred: AdvisorModel): Promise<AttestedModel> {
+export async function pickAttestedModel(candidates: readonly AdvisorModel[]): Promise<AttestedModel> {
+  const errors: string[] = [];
+  for (const model of candidates) {
+    try {
+      return await verifyModel(model);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  // The primary model's reason is the one worth reading; the fallback usually fails the same way.
+  throw new Error(errors[0] ?? "No model to verify");
+}
+
+async function verifyModel(preferred: AdvisorModel): Promise<AttestedModel> {
   if (!ADVISOR_MODELS.includes(preferred)) {
     throw new Error(`Model not allowed: ${preferred}`);
   }
@@ -231,6 +244,15 @@ export async function streamChatCompletion(options: {
 
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
+    // Our proxy's own refusals (sign in, out of credits, trial used up) are written for people.
+    if ([401, 402, 403, 429].includes(response.status)) {
+      try {
+        const refusal = (JSON.parse(detail) as { error?: unknown }).error;
+        if (typeof refusal === "string" && refusal) throw new Error(refusal);
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
+      }
+    }
     throw new Error(`Chat HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`);
   }
 

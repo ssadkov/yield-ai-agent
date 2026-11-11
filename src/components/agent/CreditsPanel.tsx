@@ -13,6 +13,7 @@ import {
   type PurchaseQuote,
 } from "@/lib/credits/client";
 import { buildUsdcDepositTx, panelConnections, withFallback } from "@/lib/agent/solanaSafe";
+import { AiPoolMeter } from "@/components/agent/AiPoolMeter";
 import { MAX_PURCHASE_USD, MIN_PURCHASE_USD, PURCHASE_OPTIONS_USD, purchaseAmountUnits } from "@/lib/credits/ledger";
 
 const AMOUNTS = PURCHASE_OPTIONS_USD;
@@ -32,7 +33,7 @@ function errorText(error: unknown): string {
  * Advisor credits above the composer: sign in with the wallet, see the balance, top up with any
  * listed token through NEAR Intents 1-Click. Hidden when the server has credits off.
  */
-export function CreditsPanel() {
+export function CreditsPanel({ onState }: { onState?: (state: CreditsState | null, wallet: string | null) => void } = {}) {
   const { publicKey, connected, signMessage, sendTransaction } = useWallet();
   const wallet = connected && publicKey ? publicKey.toBase58() : null;
   const [state, setState] = useState<CreditsState | null>(null);
@@ -44,6 +45,7 @@ export function CreditsPanel() {
   const [refundTo, setRefundTo] = useState("");
   const [quote, setQuote] = useState<PurchaseQuote | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [showPool, setShowPool] = useState(false);
   const timer = useRef<number | null>(null);
 
   const refresh = useCallback(() => {
@@ -62,6 +64,10 @@ export function CreditsPanel() {
       if (timer.current !== null) window.clearTimeout(timer.current);
     };
   }, [refresh, wallet]);
+
+  useEffect(() => {
+    onState?.(state, wallet);
+  }, [onState, state, wallet]);
 
   if (!state?.enabled) return null;
 
@@ -146,19 +152,26 @@ export function CreditsPanel() {
 
   const balance = state.balance;
   return (
-    <div className="mx-3.5 mb-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed sm:mx-5">
+    <div className="mx-3.5 mb-1.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[12.5px] leading-relaxed sm:mx-5">
       {!wallet ? (
-        <p className="text-muted-foreground">Connect a Solana wallet to use the advisor (free {usd(state.freeMonthlyUsd ?? 0)}/month).</p>
+        <p className="text-muted-foreground">
+          {state.trial && state.trial.requestsLeft > 0
+            ? `Try it without a wallet: ${state.trial.requestsLeft} free requests left today. `
+            : state.trial
+              ? "Today's free tries are used. "
+              : ""}
+          Connect a Solana wallet for ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
+        </p>
       ) : !signedInAs || !state.signedIn ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-muted-foreground">
-            Sign once with your wallet to chat. Free {usd(state.freeMonthlyUsd ?? 0)} of private AI per month.
+            Sign once with your wallet to chat. ${(state.freeMonthlyUsd ?? 0).toFixed(2)} of private AI free every month.
           </span>
           <button
             type="button"
             disabled={busy !== null}
             onClick={() => void doSignIn()}
-            className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[11px] font-medium text-primary-foreground disabled:opacity-40"
+            className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[12.5px] font-medium text-primary-foreground disabled:opacity-40"
           >
             {busy === "signin" ? "Sign…" : "Sign in"}
           </button>
@@ -173,9 +186,19 @@ export function CreditsPanel() {
                 · free left {usd(balance?.freeLeftUsd ?? 0)} · from your Safe yield {usd(balance?.yieldLeftUsd ?? 0)} · bought{" "}
                 {usd(Math.max(0, balance?.purchasedLeftUsd ?? 0))}
               </span>
+              <button
+                type="button"
+                aria-expanded={showPool}
+                aria-label="Where free AI comes from"
+                title="Where free AI comes from"
+                onClick={() => setShowPool((v) => !v)}
+                className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10.5px] text-muted-foreground align-middle hover:text-foreground"
+              >
+                i
+              </button>
             </span>
             {state.purchasesEnabled ? (
-              <button type="button" onClick={() => setOpen((v) => !v)} className="text-[11px] font-medium underline">
+              <button type="button" onClick={() => setOpen((v) => !v)} className="text-[12.5px] font-medium underline">
                 {open ? "Close" : "Top up with any token"}
               </button>
             ) : null}
@@ -203,6 +226,7 @@ export function CreditsPanel() {
                 : null}
             </p>
           ) : null}
+          {showPool ? <AiPoolMeter className="mt-0.5 text-[12px] text-muted-foreground" /> : null}
           {open ? (
             <div className="mt-2 space-y-2">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -287,7 +311,7 @@ export function CreditsPanel() {
                       {busy === "pay" ? "Sign…" : "Pay with wallet"}
                     </button>
                   ) : (
-                    <p className="mt-1 break-all font-mono text-[10px]">
+                    <p className="mt-1 break-all font-mono text-[11.5px]">
                       Send exactly {quote.amountInFormatted} {quote.asset.symbol} on {quote.asset.chain} to {quote.depositAddress}
                       {quote.depositMemo ? ` (memo ${quote.depositMemo})` : ""}
                       <button type="button" onClick={() => poll(quote.depositAddress)} className="ml-2 underline">
