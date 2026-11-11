@@ -132,7 +132,7 @@ export function AgentHeader({
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="panel-glass absolute right-0 mt-2 w-72 overflow-hidden rounded-2xl"
+                  className="panel-popover absolute right-0 mt-2 w-72 overflow-hidden rounded-2xl"
                 >
                   <div className="space-y-3 divide-y divide-border px-3 py-1">
                     {solanaAddress ? (

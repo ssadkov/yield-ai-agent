@@ -58,53 +58,51 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 /**
- * Pick the first advisor model whose NEAR attestation verifies, and use the E2EE key bound to it.
+ * Verify NEAR attestation for the model the user selected (or the default).
  * `@nearai/inference-sdk` checks every candidate: Intel TDX quote and TCB status, report data
  * binding our fresh nonce and the signer, RTMR3 event log, MRCONFIGID, and NVIDIA GPU evidence
  * when present (collateral via NEAR AI's CORS proxies). Every candidate must pass and they must
- * agree on the key; otherwise we try the next model and never send anything to this one.
+ * agree on the key; otherwise we never send anything to this model.
  * The SDK is loaded on first use so it stays out of the page's initial bundle.
  */
-export async function pickAttestedModel(): Promise<AttestedModel> {
+export async function pickAttestedModel(preferred: AdvisorModel): Promise<AttestedModel> {
+  if (!ADVISOR_MODELS.includes(preferred)) {
+    throw new Error(`Model not allowed: ${preferred}`);
+  }
   const { AttestationClient, verifyModelAttestation } = await import("@nearai/inference-sdk");
   const client = new AttestationClient({ baseUrl: `${window.location.origin}${PROXY}/v1` });
-  let lastError = "No attested model available";
-  for (const model of ADVISOR_MODELS) {
-    try {
-      const fetched = await client.fetchModelAttestations({ model, signingAlgo: "ed25519" });
-      if (fetched.attestations.length === 0) {
-        lastError = `No NEAR attestation for ${model}`;
-        continue;
-      }
-      const verified = await Promise.all(
-        fetched.attestations.map((attestation) =>
-          verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding })
-        )
-      );
-      const keys = new Set(verified.map((v) => v.signingPublicKey).filter((k): k is string => Boolean(k)));
-      if (keys.size !== 1) {
-        lastError = `Attestation for ${model} has ${keys.size} distinct E2EE keys`;
-        continue;
-      }
-      const [key] = keys;
-      const first = verified[0];
-      return {
-        model,
-        modelPubKeyHex: key,
-        nonce: fetched.clientBinding.nonce,
-        attestation: {
-          tcbStatus: first.tcbStatus,
-          gpuEvidence: verified.every((v) => v.gpuEvidence === "verified") ? "verified" : "not_provided",
-          signingAddress: first.signer.signingAddress,
-          verifiedAt: Date.now(),
-        },
-        verifiedAttestations: verified,
-      };
-    } catch (error) {
-      lastError = `Attestation failed for ${model}: ${error instanceof Error ? error.message : String(error)}`;
+  try {
+    const fetched = await client.fetchModelAttestations({ model: preferred, signingAlgo: "ed25519" });
+    if (fetched.attestations.length === 0) {
+      throw new Error(`No NEAR attestation for ${preferred}`);
     }
+    const verified = await Promise.all(
+      fetched.attestations.map((attestation) =>
+        verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding })
+      )
+    );
+    const keys = new Set(verified.map((v) => v.signingPublicKey).filter((k): k is string => Boolean(k)));
+    if (keys.size !== 1) {
+      throw new Error(`Attestation for ${preferred} has ${keys.size} distinct E2EE keys`);
+    }
+    const [key] = keys;
+    const first = verified[0];
+    return {
+      model: preferred,
+      modelPubKeyHex: key,
+      nonce: fetched.clientBinding.nonce,
+      attestation: {
+        tcbStatus: first.tcbStatus,
+        gpuEvidence: verified.every((v) => v.gpuEvidence === "verified") ? "verified" : "not_provided",
+        signingAddress: first.signer.signingAddress,
+        verifiedAt: Date.now(),
+      },
+      verifiedAttestations: verified,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Attestation failed for ${preferred}: ${detail}`);
   }
-  throw new Error(lastError);
 }
 
 export function createSessionKeys(): ClientKeys {
@@ -199,14 +197,17 @@ export async function streamChatCompletion(options: {
   attested: AttestedModel;
   keys: ClientKeys;
   messages: ChatMessage[];
-  tools: ToolDef[];
+  /** Omit or pass [] for free playground (no function tools). */
+  tools?: ToolDef[];
   handlers?: StreamHandlers;
 }): Promise<StreamResult> {
   const { attested, keys, messages, tools, handlers } = options;
+  const encryptedTools =
+    tools && tools.length > 0 ? await encryptTools(tools, attested.modelPubKeyHex) : undefined;
   const body = {
     model: attested.model,
     messages: await encryptMessages(messages, attested.modelPubKeyHex),
-    tools: await encryptTools(tools, attested.modelPubKeyHex),
+    ...(encryptedTools ? { tools: encryptedTools } : {}),
     max_tokens: 900,
     stream: true,
     // Final chunk carries token counts in plain text; the proxy meters them per wallet.

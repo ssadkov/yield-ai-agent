@@ -1,14 +1,23 @@
-import type { ActionCard, ProposedPlan } from "@/lib/advisor/tools";
-import type { ChatMessage } from "@/lib/advisor/nearProxy";
-import type { UiMessage } from "@/lib/advisor/runTurn";
-import { ADVISOR_SYSTEM_PROMPT } from "@/lib/advisor/knowledge";
+import type { ActionCard, ProposedPlan } from "./tools.ts";
+import { seedHistoryForMode, type ChatMode } from "./modes.ts";
 
+/** Model transcript rows rebuilt from the UI (no tool-call reconstruction). */
+export type RebuiltChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+/** Legacy key — still used for the advisor tab so existing local history survives. */
 export const ADVISOR_CHAT_STORAGE_KEY = "yield-agent:advisor-chat-messages";
+export const FREE_CHAT_STORAGE_KEY = "yield-agent:free-chat-messages";
+
+const STORAGE_KEY: Record<ChatMode, string> = {
+  advisor: ADVISOR_CHAT_STORAGE_KEY,
+  free: FREE_CHAT_STORAGE_KEY,
+};
 
 /** Cap stored history so localStorage stays small. */
 export const ADVISOR_CHAT_MAX_MESSAGES = 40;
 
-type StoredMessage = {
+/** Persisted / rebuilt chat rows (proof stays in-memory only). */
+export type StoredChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -35,7 +44,7 @@ function isActionCard(value: unknown): value is ActionCard {
   return true;
 }
 
-function isStoredMessage(value: unknown): value is StoredMessage {
+function isStoredMessage(value: unknown): value is StoredChatMessage {
   if (!value || typeof value !== "object") return false;
   const msg = value as Record<string, unknown>;
   if (typeof msg.id !== "string") return false;
@@ -46,30 +55,38 @@ function isStoredMessage(value: unknown): value is StoredMessage {
   return true;
 }
 
-export function loadAdvisorChatHistory(): UiMessage[] {
+function parseStoredMessages(raw: string | null): StoredChatMessage[] {
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(isStoredMessage)
+    .filter((msg) => msg.content.trim().length > 0 || Boolean(msg.actionCard))
+    .slice(-ADVISOR_CHAT_MAX_MESSAGES)
+    .map((msg) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      plan: msg.plan,
+      actionCard: msg.actionCard,
+    }));
+}
+
+export function loadChatHistory(mode: ChatMode): StoredChatMessage[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(ADVISOR_CHAT_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isStoredMessage)
-      .filter((msg) => msg.content.trim().length > 0 || Boolean(msg.actionCard))
-      .slice(-ADVISOR_CHAT_MAX_MESSAGES)
-      .map((msg) => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        plan: msg.plan,
-        actionCard: msg.actionCard,
-      }));
+    return parseStoredMessages(window.localStorage.getItem(STORAGE_KEY[mode]));
   } catch {
     return [];
   }
 }
 
-export function saveAdvisorChatHistory(messages: UiMessage[]): void {
+/** @deprecated Prefer loadChatHistory("advisor") */
+export function loadAdvisorChatHistory(): StoredChatMessage[] {
+  return loadChatHistory("advisor");
+}
+
+export function saveChatHistory(mode: ChatMode, messages: StoredChatMessage[]): void {
   if (typeof window === "undefined") return;
   try {
     const trimmed = messages
@@ -82,24 +99,39 @@ export function saveAdvisorChatHistory(messages: UiMessage[]): void {
         ...(msg.plan ? { plan: msg.plan } : {}),
         ...(msg.actionCard ? { actionCard: msg.actionCard } : {}),
       }));
-    window.localStorage.setItem(ADVISOR_CHAT_STORAGE_KEY, JSON.stringify(trimmed));
+    window.localStorage.setItem(STORAGE_KEY[mode], JSON.stringify(trimmed));
   } catch {
     // Quota / private mode — ignore
   }
 }
 
-export function clearAdvisorChatHistory(): void {
+/** @deprecated Prefer saveChatHistory("advisor", messages) */
+export function saveAdvisorChatHistory(messages: StoredChatMessage[]): void {
+  saveChatHistory("advisor", messages);
+}
+
+export function clearChatHistory(mode: ChatMode): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(ADVISOR_CHAT_STORAGE_KEY);
+    window.localStorage.removeItem(STORAGE_KEY[mode]);
   } catch {
     // ignore
   }
 }
 
+/** @deprecated Prefer clearChatHistory("advisor") */
+export function clearAdvisorChatHistory(): void {
+  clearChatHistory("advisor");
+}
+
+export { seedHistoryForMode };
+
 /** Rebuild model context from visible UI messages after a reload. */
-export function historyFromUiMessages(messages: UiMessage[]): ChatMessage[] {
-  const history: ChatMessage[] = [{ role: "system", content: ADVISOR_SYSTEM_PROMPT }];
+export function historyFromUiMessages(
+  messages: StoredChatMessage[],
+  mode: ChatMode = "advisor"
+): RebuiltChatMessage[] {
+  const history: RebuiltChatMessage[] = [...seedHistoryForMode(mode)];
   for (const message of messages) {
     if (!message.content.trim() && !message.actionCard && !message.plan) continue;
     if (message.role === "user") {

@@ -39,7 +39,7 @@ export function AnswerProofLine({
           : `✗ Signature not verified: ${proof.error ?? "unknown error"}`}
       </button>
       {open ? (
-        <div className="mt-1.5 space-y-1 rounded-lg border border-border/70 bg-muted/30 p-2 text-muted-foreground">
+        <div className="panel-popover mt-1.5 space-y-1 rounded-lg p-2 text-muted-foreground">
           {attestation ? (
             <p>
               Model {model ?? "?"} · Intel TDX {attestation.tcbStatus} ·{" "}

@@ -50,6 +50,7 @@
   --atmosphere-1: rgba(31, 111, 235, 0.12);
   --atmosphere-2: rgba(110, 180, 255, 0.1);
   --panel-shadow: 0 24px 64px -32px rgba(20, 35, 60, 0.28);
+  --popover: #ffffff;
   --hairline: linear-gradient(90deg, transparent, rgba(31, 111, 235, 0.55), transparent);
 }
 
@@ -77,6 +78,7 @@
   --atmosphere-1: rgba(77, 141, 255, 0.16);
   --atmosphere-2: rgba(56, 189, 248, 0.08);
   --panel-shadow: 0 28px 80px -36px rgba(0, 0, 0, 0.85);
+  --popover: #0c121e;
   --hairline: linear-gradient(90deg, transparent, rgba(77, 141, 255, 0.7), transparent);
 }
 
@@ -130,6 +132,15 @@ input:disabled {
   box-shadow: var(--panel-shadow);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+/* Floating menus / tooltips / dialogs: stay readable over busy panels. */
+.panel-popover {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
 }
 
 .panel-hairline::before {

@@ -1,4 +1,5 @@
-import { ADVISOR_SYSTEM_PROMPT } from "@/lib/advisor/knowledge";
+import { DEFAULT_ADVISOR_MODEL, type AdvisorModel } from "@/lib/advisor/models";
+import { seedHistoryForMode, type ChatMode } from "@/lib/advisor/modes";
 import {
   createSessionKeys,
   pickAttestedModel,
@@ -32,19 +33,22 @@ export type AdvisorSession = {
   attested: AttestedModel;
   keys: ClientKeys;
   history: ChatMessage[];
+  mode: ChatMode;
 };
 
-export async function startAdvisorSession(seedHistory?: ChatMessage[]): Promise<AdvisorSession> {
-  const attested = await pickAttestedModel();
+export async function startAdvisorSession(
+  seedHistory?: ChatMessage[],
+  model: AdvisorModel = DEFAULT_ADVISOR_MODEL,
+  mode: ChatMode = "advisor"
+): Promise<AdvisorSession> {
+  const attested = await pickAttestedModel(model);
   const keys = createSessionKeys();
-  const history =
-    seedHistory && seedHistory.length > 0
-      ? seedHistory
-      : [{ role: "system" as const, content: ADVISOR_SYSTEM_PROMPT }];
+  const history = seedHistory !== undefined ? seedHistory : seedHistoryForMode(mode);
   return {
     attested,
     keys,
     history,
+    mode,
   };
 }
 
@@ -70,19 +74,22 @@ export async function runAdvisorTurn(options: {
   const { session, userText, onAssistantDelta, onStatus } = options;
   session.history.push({ role: "user", content: userText });
 
+  const tools = session.mode === "advisor" ? ADVISOR_TOOLS : undefined;
+  const maxSteps = session.mode === "advisor" ? 4 : 1;
+
   const inferenceIds: string[] = [];
   const evidence: CompletionEvidence[] = [];
   let plan: ProposedPlan | null = null;
   let actionCard: ActionCard | null = null;
   let finalText = "";
 
-  for (let step = 0; step < 4; step += 1) {
+  for (let step = 0; step < maxSteps; step += 1) {
     onStatus?.(step === 0 ? "Thinking…" : "Using tools…");
     const result = await streamChatCompletion({
       attested: session.attested,
       keys: session.keys,
       messages: session.history,
-      tools: ADVISOR_TOOLS,
+      tools,
       handlers: {
         onText: (chunk) => {
           finalText += chunk;
@@ -93,7 +100,7 @@ export async function runAdvisorTurn(options: {
     if (result.inferenceId) inferenceIds.push(result.inferenceId);
     if (result.evidence) evidence.push(result.evidence);
 
-    if (result.toolCalls.length === 0) {
+    if (result.toolCalls.length === 0 || session.mode === "free") {
       finalText = result.text || finalText;
       session.history.push({ role: "assistant", content: finalText });
       break;

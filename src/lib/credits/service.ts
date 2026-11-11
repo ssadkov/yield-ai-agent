@@ -12,7 +12,7 @@ import {
   type Purchase,
 } from "./db.ts";
 import { loadSafeSummary } from "../agent/safeSummary.server.ts";
-import { ADVISOR_MODELS } from "../advisor/models.ts";
+import { DEFAULT_ADVISOR_MODEL } from "../advisor/models.ts";
 import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
 
 /** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
@@ -101,7 +101,7 @@ export async function advisorModelPrice(): Promise<ModelPrice | null> {
   try {
     const response = await fetch("https://cloud-api.near.ai/v1/models", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
     const json = (await response.json()) as { data?: { id: string; pricing?: { input?: number; output?: number } }[] };
-    const row = json.data?.find((m) => m.id === ADVISOR_MODELS[0]);
+    const row = json.data?.find((m) => m.id === DEFAULT_ADVISOR_MODEL);
     if (!row?.pricing?.input || !row.pricing.output) return null;
     const price = { model: row.id, inputUsdPerMillion: row.pricing.input, outputUsdPerMillion: row.pricing.output };
     priceCache = { at: Date.now(), price };
@@ -114,7 +114,7 @@ export async function advisorModelPrice(): Promise<ModelPrice | null> {
 /** What the available dollars buy on the primary model: output tokens, or typical advisor requests. */
 export function estimateRemaining(availableUsd: number, price: ModelPrice | null) {
   return {
-    model: price?.model ?? ADVISOR_MODELS[0],
+    model: price?.model ?? DEFAULT_ADVISOR_MODEL,
     outputTokens: price ? Math.floor((availableUsd / price.outputUsdPerMillion) * 1_000_000) : null,
     typicalRequests: Math.floor(availableUsd / TYPICAL_REQUEST_USD),
     typicalRequestUsd: TYPICAL_REQUEST_USD,

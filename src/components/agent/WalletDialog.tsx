@@ -69,7 +69,7 @@ export function WalletDialog({
       <button
         type="button"
         aria-label="Close"
-        className="absolute inset-0 bg-foreground/40"
+        className="absolute inset-0 bg-foreground/55 backdrop-blur-[2px]"
         onClick={onClose}
       />
       <div
@@ -77,7 +77,7 @@ export function WalletDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="wallet-dialog-title"
-        className="panel-glass relative flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[24px] sm:rounded-2xl"
+        className="panel-popover relative flex max-h-[min(88dvh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[24px] sm:rounded-2xl"
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
