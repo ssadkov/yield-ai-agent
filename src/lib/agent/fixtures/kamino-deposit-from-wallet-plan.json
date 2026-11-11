@@ -1,0 +1,25 @@
+{
+  "_note": "Live Solana Safe API kamino deposit plan from the wallet (source=wallet) for the pilot owner, 2026-11-11, 1 USDC. Public data only.",
+  "status": "ready",
+  "amountRaw": "1000000",
+  "blockhash": "6njM8RJno45oyw6fViBmYzY9ySWqYXG3V8yUADmt4qv9",
+  "lastValidBlockHeight": 446026171,
+  "state": {
+    "owner": {
+      "type": "solana",
+      "address": "EP9fKzBpQzyZC2GYjjAF9tKEeUwi7dqNqMStmxdYu4h2"
+    },
+    "safe": "FuDCEZBgp8gxP3gafnHbUJRgGW63VAmtZwsjus1U5qSZ"
+  },
+  "steps": [
+    {
+      "id": "kamino_deposit",
+      "kind": "kamino_deposit",
+      "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAFC8bUgCsmfrCF4Af9u+RpRuNvwTygtYL9TR/88hPPrKLN3WObQof/wo4micv9JKtqSscJcNGg+efNSgEnm77ghloX0gQ2RzDbamWU/fpBEW3Ri/6H7LosrFVEQH4D0z5eQ5a3cu1VW5GzsdjUOv73T8IVqOTWbeew3/lvVHtl6UNnh5fLXgW2ISnBSpCv9v8qoH8kmeP1iMTvSpogLtcewZFlWq5dXx6UA/ejCQBeT3vbKrf5733lAVfufEk81U3RcQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAADoebBp3kuXW2iYB56gBiwCH0DCQOZD5nY8cSZRyrz2pz4xTSWduhVcxD3r6fQApLFoYLUdb3vu5DacogRzw84ATZCvHbiTnsNf+U2WQNV9zDJ5S7Phu2b9OuhJqE3NuUD9ps6fZhmN2HDYqYbzBnXEb4Pi9Sg0h5UvXVBWPj73pWAXP2sg8b+gzTbz0q0I20nAFVLXx+zYPOZk/7rU/zcgUGAAUCgBoGAAcCAAEYd1EWBHK7F5EQJwAAAAAAAAAAAAAAAAAABwYAAQ8CAxAQ8iPGiVLh8rZAQg8AAAAAAAcVAAEICQELBA8RDAMFEhAQCgkNDhMUEO0IvLtzYzFVQEIPAAAAAAAHAgABGHdRFgRyuxeRiBOIEwAAAAAAAAAAAAAAAAFV/VhVdpEDfmrLUTGF586xssONQYqqvhKEhTWXHyzVSQQBBQkRBgIDBAcLEw==",
+      "transactionVersion": 0,
+      "requiredSigners": [
+        "EP9fKzBpQzyZC2GYjjAF9tKEeUwi7dqNqMStmxdYu4h2"
+      ]
+    }
+  ]
+}

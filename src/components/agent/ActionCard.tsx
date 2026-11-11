@@ -15,7 +15,7 @@ import {
   type ChatDepositTracked,
 } from "@/lib/agent/chatDeposit";
 import type { OneClickStatusResponse } from "@/lib/agent/oneClick";
-import { CreateSafeStep, KaminoStep } from "@/components/agent/SafeSteps";
+import { CreateSafeStep, KaminoStep, WalletDepositStep } from "@/components/agent/SafeSteps";
 
 const KAMINO_STRATEGY_ID = "solana:kamino_usdc";
 
@@ -95,7 +95,7 @@ export function ActionCard({ card }: { card: ActionCardData }) {
     if (phase === "signing") return "Sign…";
     if (phase === "tracking") return "Pending…";
     if (phase === "done") return "Done";
-    return "Deposit";
+    return "Via NEAR Intents";
   })();
 
   return (
@@ -105,7 +105,7 @@ export function ActionCard({ card }: { card: ActionCardData }) {
           {isDeposit ? "Deposit to Solana Safe" : "Withdraw from Safe"}
         </p>
         <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] tracking-wide text-primary">
-          {isDeposit ? "1-Click" : "USDC"}
+          {isDeposit ? "Wallet · 1-Click" : "USDC"}
         </span>
       </div>
 
@@ -179,11 +179,28 @@ export function ActionCard({ card }: { card: ActionCardData }) {
         </button>
       </div>
 
+      {isDeposit && !needsSafe && (phase === "idle" || phase === "error") && !fundedDirectly ? (
+        <WalletDepositStep
+          amountInput={amount.trim().replace(",", ".")}
+          onNoSafe={() => setNeedsSafe(true)}
+          onDeposited={({ intoKamino }) => {
+            if (intoKamino) {
+              setPhase("done");
+              setNote("Deposited from your wallet straight into Kamino.");
+            } else {
+              setFundedDirectly(true);
+              setPhase("done");
+              setNote("Deposited from your wallet into the Safe.");
+            }
+          }}
+        />
+      ) : null}
+
       {card.note ? <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{card.note}</p> : null}
 
       {isDeposit && phase === "idle" ? (
         <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/80">
-          Signs a Solana USDC transfer into 1-Click, then into your Safe. Test range: 1–5 USDC.
+          “Via NEAR Intents” sends Solana USDC to a one-time 1-Click address that pays your Safe (~1%, a few minutes). Test range: 1–5 USDC.
         </p>
       ) : null}
 
