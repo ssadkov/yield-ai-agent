@@ -12,7 +12,7 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 import { PlanCheckError, REVIEWED_EXECUTOR, checkPlanTransaction } from "./safePlans.ts";
-import { SAFE_PROGRAM_ID } from "./solanaSafe.ts";
+import { SAFE_PROGRAM_ID, USDC_MINT, safeAddress, usdcAta } from "./solanaSafe.ts";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/kamino-deposit-plan.json", import.meta.url), "utf8"));
 const pilotOwner = new PublicKey(fixture.state.owner.address);
@@ -88,4 +88,63 @@ test("create is refused with another agent, an allowlist, or an extra program", 
     SystemProgram.transfer({ fromPubkey: owner, toPubkey: Keypair.generate().publicKey, lamports: 1_000_000 }),
   ]);
   assert.throws(() => checkPlanTransaction(drain, { owner, kind: "create_safe" }), PlanCheckError);
+});
+
+const depositFixture = JSON.parse(readFileSync(new URL("./fixtures/usdc-deposit-plan.json", import.meta.url), "utf8"));
+const walletKaminoFixture = JSON.parse(
+  readFileSync(new URL("./fixtures/kamino-deposit-from-wallet-plan.json", import.meta.url), "utf8")
+);
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+
+function createAtaIx(payer: PublicKey, ata: PublicKey, wallet: PublicKey, mint: PublicKey) {
+  return new TransactionInstruction({
+    programId: ATA_PROGRAM,
+    data: Buffer.from([1]),
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: wallet, isSigner: false, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM, isSigner: false, isWritable: false },
+    ],
+  });
+}
+
+test("live wallet → Safe deposit plan passes for its owner and amount", () => {
+  checkPlanTransaction(depositFixture.steps[0].transaction, {
+    owner: pilotOwner,
+    kind: "deposit",
+    amountRaw: BigInt(depositFixture.amountRaw),
+  });
+  assert.throws(
+    () => checkPlanTransaction(depositFixture.steps[0].transaction, { owner: pilotOwner, kind: "deposit", amountRaw: BigInt(2_000_000) }),
+    PlanCheckError
+  );
+});
+
+test("live wallet → Kamino plan passes only as kamino_deposit_from_wallet", () => {
+  const tx = walletKaminoFixture.steps[0].transaction;
+  const amountRaw = BigInt(walletKaminoFixture.amountRaw);
+  checkPlanTransaction(tx, { owner: pilotOwner, kind: "kamino_deposit_from_wallet", amountRaw });
+  assert.throws(() => checkPlanTransaction(tx, { owner: pilotOwner, kind: "kamino_deposit", amountRaw }), PlanCheckError);
+  assert.throws(() => checkPlanTransaction(tx, { owner: pilotOwner, kind: "deposit", amountRaw }), PlanCheckError);
+});
+
+test("a deposit may create the Safe's own USDC account, and nothing else", () => {
+  const owner = Keypair.generate().publicKey;
+  const safe = safeAddress(owner);
+  const ok = createTx(owner, [createAtaIx(owner, usdcAta(safe), safe, USDC_MINT), safeIx(owner, depositData(BigInt(1_000_000)))]);
+  checkPlanTransaction(ok, { owner, kind: "deposit", amountRaw: BigInt(1_000_000) });
+
+  const stranger = Keypair.generate().publicKey;
+  const otherAccount = createTx(owner, [
+    createAtaIx(owner, usdcAta(stranger), stranger, USDC_MINT),
+    safeIx(owner, depositData(BigInt(1_000_000))),
+  ]);
+  assert.throws(() => checkPlanTransaction(otherAccount, { owner, kind: "deposit", amountRaw: BigInt(1_000_000) }), PlanCheckError);
+
+  // Outside a plain deposit the ATA program is not expected at all.
+  assert.throws(() => checkPlanTransaction(ok, { owner, kind: "create_safe_and_deposit", amountRaw: BigInt(1_000_000) }), PlanCheckError);
 });

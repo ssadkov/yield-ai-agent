@@ -17,7 +17,9 @@ import {
   VersionedTransaction,
   type Connection,
 } from "@solana/web3.js";
-import { SAFE_PROGRAM_ID } from "./solanaSafe.ts";
+import { SAFE_PROGRAM_ID, USDC_MINT, safeAddress, usdcAta } from "./solanaSafe.ts";
+
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
 const API = "/agent/api/solana-safe";
 
@@ -33,15 +35,51 @@ const DISCRIMINATORS = {
 } as const;
 type SafeInstruction = keyof typeof DISCRIMINATORS;
 
-export type PlanKind = "create_safe" | "create_safe_and_deposit" | "kamino_deposit";
+export type PlanKind =
+  | "create_safe"
+  | "create_safe_and_deposit"
+  | "deposit"
+  | "kamino_deposit"
+  | "kamino_deposit_from_wallet";
 
 /** Safe instructions each plan may contain, in order. */
 const EXPECTED: Record<PlanKind, SafeInstruction[]> = {
   create_safe: ["initialize_with_limits"],
   create_safe_and_deposit: ["initialize_with_limits", "deposit"],
+  // USDC from the owner's wallet into the Safe's USDC account.
+  deposit: ["deposit"],
   // Temporary 100% Kamino allocation around the deposit, then the previous allocation back.
   kamino_deposit: ["set_allocation", "kamino_deposit", "set_allocation"],
+  // Same, with the wallet → Safe deposit in the same transaction.
+  kamino_deposit_from_wallet: ["set_allocation", "deposit", "kamino_deposit", "set_allocation"],
 };
+
+/**
+ * The only non-Safe instruction a plan may carry: idempotently creating the Safe's own USDC
+ * account before a deposit, paid by the owner. Anything else from the ATA program is refused.
+ */
+function checkSafeUsdcAccountCreation(
+  ix: { accountKeyIndexes: number[]; data: Uint8Array },
+  keys: PublicKey[],
+  owner: PublicKey
+): void {
+  const at = (i: number) => {
+    const key = keys[ix.accountKeyIndexes[i]];
+    if (!key) throw new PlanCheckError("Account creation uses a lookup-table account.");
+    return key;
+  };
+  const safe = safeAddress(owner);
+  const isCreateIdempotent = ix.data.length === 1 && ix.data[0] === 1;
+  if (
+    !isCreateIdempotent ||
+    !at(0).equals(owner) ||
+    !at(1).equals(usdcAta(safe)) ||
+    !at(2).equals(safe) ||
+    !at(3).equals(USDC_MINT)
+  ) {
+    throw new PlanCheckError("The plan creates a token account other than your Safe's USDC account.");
+  }
+}
 
 export type PlanStep = {
   id: string;
@@ -99,6 +137,10 @@ export function checkPlanTransaction(
     const program = keys[ix.programIdIndex];
     if (!program) throw new PlanCheckError("Instruction program is not a static account.");
     if (program.equals(ComputeBudgetProgram.programId)) continue;
+    if (program.equals(ASSOCIATED_TOKEN_PROGRAM_ID) && expected.kind === "deposit") {
+      checkSafeUsdcAccountCreation(ix, keys, expected.owner);
+      continue;
+    }
     if (!program.equals(SAFE_PROGRAM_ID)) {
       throw new PlanCheckError(`Unexpected program in the plan: ${program.toBase58()}`);
     }
@@ -144,9 +186,21 @@ async function postPlan(path: string, body: unknown): Promise<SafePlan> {
   if (!response.ok || !json) {
     const message =
       typeof json?.error === "string" ? json.error : json?.error?.message ?? `Safe API HTTP ${response.status}`;
-    throw new Error(message);
+    const code = typeof json?.error === "object" ? (json.error as { code?: string }).code : undefined;
+    throw new SafeApiError(message, code);
   }
   return json;
+}
+
+/** Error from the Solana Safe API; `code` e.g. SAFE_NOT_CREATED, INSUFFICIENT_USDC, INSUFFICIENT_SOL. */
+export class SafeApiError extends Error {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "SafeApiError";
+    this.code = code;
+  }
 }
 
 const owner = (address: PublicKey) => ({ type: "solana", address: address.toBase58() });
@@ -159,12 +213,22 @@ export function requestCreationPlan(address: PublicKey, initialDepositUsdc?: str
   });
 }
 
-export function requestKaminoDepositPlan(address: PublicKey, amountUsdc: string): Promise<SafePlan> {
+/** USDC from the owner's wallet straight into the Safe. */
+export function requestDepositPlan(address: PublicKey, amountUsdc: string): Promise<SafePlan> {
+  return postPlan("deposits/plan", { owner: owner(address), cluster: "mainnet", amount: amountUsdc });
+}
+
+/** Into the Kamino USDC vault from the Safe's idle USDC, or straight from the wallet in one transaction. */
+export function requestKaminoDepositPlan(
+  address: PublicKey,
+  amountUsdc: string,
+  source: "safe" | "wallet" = "safe"
+): Promise<SafePlan> {
   return postPlan("protocols/kamino/deposits/plan", {
     owner: owner(address),
     cluster: "mainnet",
     amount: amountUsdc,
-    source: "safe",
+    source,
   });
 }
 

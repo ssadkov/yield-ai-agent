@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import {
+  SafeApiError,
   requestCreationPlan,
+  requestDepositPlan,
   requestKaminoDepositPlan,
   signAndSendPlan,
   type PlanKind,
@@ -45,6 +47,85 @@ function TxLine({ label, signature }: { label: string; signature: string }) {
         {shorten(signature)}
       </a>
     </p>
+  );
+}
+
+/**
+ * Direct deposit from the connected Solana wallet into its existing Safe, no bridge or 1-Click:
+ * one owner-signed transaction, either into the Safe's idle USDC or straight into Kamino.
+ */
+export function WalletDepositStep({
+  amountInput,
+  onNoSafe,
+  onDeposited,
+}: {
+  amountInput: string;
+  onNoSafe: () => void;
+  onDeposited: (result: { intoKamino: boolean }) => void;
+}) {
+  const { owner, run } = useOwnerSigner();
+  const [busy, setBusy] = useState<"safe" | "kamino" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [signature, setSignature] = useState<{ sig: string; intoKamino: boolean } | null>(null);
+  const amountRaw = parseUsdc(amountInput);
+  const kaminoTooSmall = amountRaw !== null && amountRaw < KAMINO_MIN_RAW;
+
+  const deposit = async (intoKamino: boolean) => {
+    if (!owner) return setError("Connect a Solana wallet first.");
+    if (amountRaw === null) return setError("Enter a USDC amount, up to 6 decimals.");
+    setError(null);
+    setBusy(intoKamino ? "kamino" : "safe");
+    try {
+      const amount = formatUsdc(amountRaw);
+      const sig = intoKamino
+        ? await run("kamino_deposit_from_wallet", () => requestKaminoDepositPlan(owner, amount, "wallet"), amountRaw)
+        : await run("deposit", () => requestDepositPlan(owner, amount), amountRaw);
+      setSignature({ sig, intoKamino });
+      onDeposited({ intoKamino });
+    } catch (err) {
+      if (err instanceof SafeApiError && err.code === "SAFE_NOT_CREATED") {
+        onNoSafe();
+        return;
+      }
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!owner) return null;
+  return (
+    <div className="mt-2.5">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy !== null || Boolean(signature) || amountRaw === null}
+          onClick={() => void deposit(false)}
+          className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-40"
+        >
+          {busy === "safe" ? "Sign…" : "Deposit from wallet"}
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null || Boolean(signature) || amountRaw === null || kaminoTooSmall}
+          onClick={() => void deposit(true)}
+          className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-medium text-foreground disabled:opacity-40"
+        >
+          {busy === "kamino" ? "Sign…" : "Deposit straight into Kamino"}
+        </button>
+      </div>
+      <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/80">
+        USDC from this Solana wallet into your Safe, one signature, no bridge. Kamino needs at least 1 USDC.
+      </p>
+      {signature ? (
+        <TxLine label={signature.intoKamino ? "Deposited into Kamino" : "Deposited into Safe"} signature={signature.sig} />
+      ) : null}
+      {error ? (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

@@ -17,6 +17,7 @@ const MAX_BODY_BYTES = 2048;
 const ROUTES: { method: "GET" | "POST"; path: RegExp }[] = [
   { method: "GET", path: /^safes$/ },
   { method: "POST", path: /^safes\/creation-plan$/ },
+  { method: "POST", path: /^deposits\/plan$/ },
   { method: "POST", path: /^protocols\/kamino\/deposits\/plan$/ },
   { method: "GET", path: /^transactions\/[1-9A-HJ-NP-Za-km-z]{64,88}$/ },
 ];
