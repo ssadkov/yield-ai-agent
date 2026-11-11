@@ -30,6 +30,7 @@ import {
   derivedAptosAddress,
   sameAptosAddress,
 } from "@/lib/agent/aptosDerived";
+import { SHOW_APTOS } from "@/lib/agent/features";
 
 /** Test-sized deposits only, while the flow is unproven on mainnet. */
 const MIN_RAW = BigInt(1_000_000);
@@ -38,6 +39,7 @@ const SLIPPAGE_BPS = 100;
 const POLL_MS = 5_000;
 const QUOTE_MAX_AGE_MS = 10 * 60 * 1000;
 const STORAGE_KEY = "agent.intents.lastDeposit.v1";
+const OPEN_KEY = "agent.intents.panelOpen.v1";
 
 type Destination = "solana-safe" | "aptos";
 
@@ -82,7 +84,17 @@ function errorText(error: unknown): string {
 const linkClass =
   "underline decoration-border underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const buttonClass =
-  "inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
+
+function loadPanelOpen(): boolean {
+  try {
+    const raw = window.localStorage.getItem(OPEN_KEY);
+    if (raw === null) return false;
+    return raw === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function IntentsDepositPanel({
   aptosAddress,
@@ -95,10 +107,22 @@ export function IntentsDepositPanel({
   const owner = connected && publicKey ? publicKey.toBase58() : null;
   const [host, setHost] = useState<string | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [open, setOpen] = useState(false);
+  const [openReady, setOpenReady] = useState(false);
   useEffect(() => {
     setHost(window.location.host);
     setConnections(panelConnections(window.location.host, window.location.origin));
+    setOpen(loadPanelOpen());
+    setOpenReady(true);
   }, []);
+  useEffect(() => {
+    if (!openReady) return;
+    try {
+      window.localStorage.setItem(OPEN_KEY, open ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [open, openReady]);
   // The Safe address needs no RPC: show it even when reads fail.
   const derivedSafe = useMemo(() => {
     if (!owner) return null;
@@ -316,197 +340,311 @@ export function IntentsDepositPanel({
   const finalStatus = status && FINAL_STATUSES.has(String(status.status)) ? String(status.status) : null;
   const delta =
     tracked && recipientAfterRaw !== null ? recipientAfterRaw - BigInt(tracked.recipientBeforeRaw) : null;
+  const balancesLoading = Boolean(owner && !safe && !safeError);
+  const activeDeposit = Boolean(tracked && !finalStatus);
+
+  useEffect(() => {
+    if (activeDeposit || (quote && quoteFresh) || error) setOpen(true);
+  }, [activeDeposit, quote, quoteFresh, error]);
+
+  const collapsedSummary = tracked
+    ? `${formatUsdc(BigInt(tracked.amountRaw))} USDC · ${status ? String(status.status) : "pending"}`
+    : destination === "solana-safe"
+      ? `Solana Safe · ${amount} USDC`
+      : `Aptos · ${amount} USDC`;
+
+  const solanaMeta = !derivedSafe
+    ? null
+    : safeError
+      ? "Balance unavailable"
+      : !safe
+        ? "Reading…"
+        : safe.safeExists
+          ? `${formatUsdc(safe.safeUsdcRaw)} USDC`
+          : "No Safe yet";
+
+  if (!owner || connections.length === 0) {
+    return (
+      <section aria-label="Deposit loading" className="panel-glass overflow-hidden rounded-2xl px-4 py-3" aria-busy="true">
+        <div className="h-2.5 w-20 animate-pulse rounded bg-muted" />
+        <div className="mt-3 h-4 w-36 animate-pulse rounded bg-muted" />
+        <div className="mt-4 space-y-3">
+          <div className="h-10 w-full animate-pulse rounded-xl bg-muted" />
+          <div className="h-10 w-full animate-pulse rounded-xl bg-muted" />
+          <div className="h-10 w-full animate-pulse rounded-full bg-muted" />
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section aria-label="Deposit test" className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="border-b border-border px-5 py-4">
-        <h2 className="text-base font-semibold">Deposit test · NEAR Intents 1-Click</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Sends USDC from this Solana wallet to a one-time 1-Click deposit address. 1-Click pays USDC to the
-          destination below. Mainnet, real money: 1 to 5 USDC. If the swap does not complete, 1-Click refunds this
-          wallet.
-        </p>
-      </div>
-
-      <fieldset className="border-b border-border px-5 py-4">
-        <legend className="text-sm font-semibold">Destination</legend>
-        <label className="mt-3 flex items-start gap-3">
-          <input
-            type="radio"
-            name="destination"
-            className="mt-1"
-            checked={destination === "solana-safe"}
-            onChange={() => setDestination("solana-safe")}
-          />
-          <span className="text-sm leading-6">
-            <span className="font-medium">Solana Safe</span>
-            {derivedSafe ? (
-              <span className="block text-muted-foreground">
-                Recipient: Safe{" "}
-                <a
-                  className={`${linkClass} font-mono`}
-                  href={`https://solscan.io/account/${derivedSafe.safe.toBase58()}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {shorten(derivedSafe.safe.toBase58())}
-                </a>
-                . 1-Click pays into its USDC account{" "}
-                <span className="font-mono">{shorten(derivedSafe.ata.toBase58())}</span>
-                {!safe
-                  ? safeError
-                    ? ". Balance not loaded."
-                    : ". Reading…"
-                  : safe.safeExists
-                    ? ` (now ${formatUsdc(safe.safeUsdcRaw)} USDC).`
-                    : ". No Safe on-chain yet."}
-              </span>
-            ) : null}
-          </span>
-        </label>
-        <label className="mt-3 flex items-start gap-3">
-          <input
-            type="radio"
-            name="destination"
-            className="mt-1"
-            checked={destination === "aptos"}
-            onChange={() => setDestination("aptos")}
-          />
-          <span className="text-sm leading-6">
-            <span className="font-medium">Aptos account (derived)</span>
-            {aptos?.production ? (
-              <span className="block text-muted-foreground">
-                Recipient: <span className="break-all font-mono">{aptos.production}</span>, your derived account on{" "}
-                {PRODUCTION_HOST}
-                {aptosBalance !== null ? ` (now ${formatUsdc(aptosBalance)} USDC)` : ""}. Move it into the Aptos Safe
-                from {PRODUCTION_HOST} afterwards.
-              </span>
-            ) : null}
-            <span className="mt-1 block text-xs text-muted-foreground">
-              {aptos?.formulaVerified
-                ? `Address check passed: the formula reproduces the connected address for ${host}. Compare ${shorten(
-                    aptos.production ?? ""
-                  )} once with the address ${PRODUCTION_HOST} shows.`
-                : aptosIsDerived
-                  ? "Address check failed: the computed address for this host does not match the connected one."
-                  : "Needs a Solana wallet connected as a derived Aptos account."}
-            </span>
-          </span>
-        </label>
-      </fieldset>
-
-      <div className="border-b border-border px-5 py-4">
-        <label className="block text-sm font-semibold" htmlFor="intents-amount">
-          Amount, USDC on Solana
-        </label>
-        <div className="mt-2 flex gap-3">
-          <input
-            id="intents-amount"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="h-11 w-32 rounded-full border border-border bg-background px-4 font-mono text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => void getQuote()}
-            disabled={blocker !== null || busy !== null}
-            className={`${buttonClass} border border-border hover:bg-muted`}
-          >
-            {busy === "quote" ? "Quoting…" : "Get quote"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void refreshBalances()}
-            className={`${buttonClass} text-muted-foreground hover:bg-muted`}
-          >
-            Refresh
-          </button>
+    <section aria-label="Deposit test" className="panel-glass overflow-hidden rounded-2xl">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
+            <path
+              d="M4 8.5h16v9.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Zm2.5-4h11L19 8.5H5l1.5-4Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+            <path d="M12 12.5v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
         </div>
-        {blocker ? <p className="mt-3 text-sm text-muted-foreground">{blocker}</p> : null}
-        {safe ? (
-          <p className="mt-2 text-xs text-muted-foreground">Wallet USDC on Solana: {formatUsdc(safe.walletUsdcRaw)}</p>
-        ) : null}
-      </div>
-
-      {quote && quoteFresh ? (
-        <div className="border-b border-border px-5 py-4 text-sm leading-6">
-          <h3 className="font-semibold">Quote</h3>
-          <p>
-            You send {quote.response.quote.amountInFormatted} USDC, the destination gets about{" "}
-            {quote.response.quote.amountOutFormatted} USDC (at least {formatUsdc(BigInt(quote.response.quote.minAmountOut))}
-            ), in about {quote.response.quote.timeEstimate ?? "?"} s.
-          </p>
-          <p className="text-muted-foreground">
-            Deposit address <span className="font-mono">{shorten(quote.response.quote.depositAddress ?? "")}</span>
-            {quote.response.quote.deadline ? `, valid until ${new Date(quote.response.quote.deadline).toLocaleTimeString()}` : ""}.
-            Recipient <span className="font-mono">{shorten(recipient ?? "")}</span>, refunds to this wallet.
-          </p>
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={blocker !== null || busy !== null}
-            className={`${buttonClass} mt-3 bg-primary text-primary-foreground hover:opacity-90`}
-          >
-            {busy === "sign" ? "Confirm in the wallet…" : `Send ${quote.response.quote.amountInFormatted} USDC`}
-          </button>
-        </div>
-      ) : null}
-
-      {tracked ? (
-        <div className="border-b border-border px-5 py-4 text-sm leading-6">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="font-semibold">Deposit</h3>
-            <p className="font-mono text-xs">{status ? String(status.status) : "Waiting for status…"}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold tracking-tight">Deposit 1-Click</h2>
+            {activeDeposit ? (
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" aria-hidden />
+            ) : null}
           </div>
-          <p className="text-muted-foreground">
-            {formatUsdc(BigInt(tracked.amountRaw))} USDC to{" "}
-            {tracked.destination === "solana-safe" ? "Solana Safe" : "Aptos account"}{" "}
-            <span className="font-mono">{shorten(tracked.recipient)}</span>. Sent in{" "}
-            <a className={linkClass} href={`https://solscan.io/tx/${tracked.txSig}`} target="_blank" rel="noopener noreferrer">
-              {shorten(tracked.txSig)}
-            </a>
-            .
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {open ? "Mainnet USDC · refunds on fail" : collapsedSummary}
           </p>
-          {status?.swapDetails?.destinationChainTxHashes?.map((tx) => (
-            <p key={tx.hash}>
-              Payout:{" "}
+        </div>
+        <span
+          className={[
+            "mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-transform",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+          aria-hidden
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="border-t border-border">
+          <div className="space-y-3 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Destination</p>
+              <button
+                type="button"
+                onClick={() => void refreshBalances()}
+                className="inline-flex h-7 items-center rounded-full px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {balancesLoading ? (
+              <div className="space-y-2" aria-busy="true" aria-label="Loading balances">
+                <div className="h-14 w-full animate-pulse rounded-2xl bg-muted" />
+                <div className="h-14 w-full animate-pulse rounded-2xl bg-muted" />
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDestination("solana-safe")}
+                  className={[
+                    "rounded-2xl border px-3 py-2.5 text-left transition-colors",
+                    destination === "solana-safe"
+                      ? "border-primary/40 bg-primary/5 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_20%,transparent)]"
+                      : "border-border/80 bg-surface hover:border-border hover:bg-muted/50",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">Solana Safe</span>
+                    {destination === "solana-safe" ? (
+                      <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
+                    ) : null}
+                  </div>
+                  {derivedSafe ? (
+                    <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                      {shorten(derivedSafe.safe.toBase58())}
+                      {solanaMeta ? ` · ${solanaMeta}` : ""}
+                    </p>
+                  ) : null}
+                </button>
+
+                {SHOW_APTOS ? (
+                <button
+                  type="button"
+                  disabled={!aptos?.formulaVerified}
+                  onClick={() => setDestination("aptos")}
+                  className={[
+                    "rounded-2xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                    destination === "aptos"
+                      ? "border-primary/40 bg-primary/5 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_20%,transparent)]"
+                      : "border-border/80 bg-surface hover:border-border hover:bg-muted/50",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">Aptos</span>
+                    {destination === "aptos" ? (
+                      <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
+                    ) : null}
+                  </div>
+                  {aptos?.formulaVerified && aptos.production ? (
+                    <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                      {shorten(aptos.production)}
+                      {aptosBalance !== null ? ` · ${formatUsdc(aptosBalance)} USDC` : ""}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {aptosIsDerived ? "Unavailable on this host" : "Needs derived Solana wallet"}
+                    </p>
+                  )}
+                </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="intents-amount">
+                Amount
+              </label>
+              {!balancesLoading && safe ? (
+                <span className="text-[11px] text-muted-foreground">
+                  Wallet {formatUsdc(safe.walletUsdcRaw)} USDC
+                </span>
+              ) : null}
+            </div>
+
+            {balancesLoading ? (
+              <div className="mt-2 space-y-2" aria-busy="true">
+                <div className="h-11 w-full animate-pulse rounded-2xl bg-muted" />
+                <div className="h-8 w-full animate-pulse rounded-full bg-muted" />
+              </div>
+            ) : (
+              <>
+                <div className="relative mt-2">
+                  <input
+                    id="intents-amount"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="h-11 w-full rounded-2xl border border-border bg-background px-3 pr-14 font-mono text-sm outline-none focus:border-primary/40 focus:shadow-[0_0_0_3px_var(--glow)]"
+                  />
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted-foreground">
+                    USDC
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void getQuote()}
+                  disabled={blocker !== null || busy !== null}
+                  className={`${buttonClass} mt-3 w-full bg-primary text-primary-foreground hover:opacity-90`}
+                >
+                  {busy === "quote" ? "Getting quote…" : "Get quote"}
+                </button>
+                {blocker ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{blocker}</p> : null}
+              </>
+            )}
+          </div>
+
+          {quote && quoteFresh ? (
+            <div className="border-t border-border px-4 py-3">
+              <div className="rounded-2xl border border-border/70 bg-surface px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">Quote</p>
+                <p className="mt-1 text-sm font-semibold tracking-tight">
+                  {quote.response.quote.amountInFormatted} → ~{quote.response.quote.amountOutFormatted} USDC
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  Min {formatUsdc(BigInt(quote.response.quote.minAmountOut))} · ~
+                  {quote.response.quote.timeEstimate ?? "?"}s
+                  {quote.response.quote.deadline
+                    ? ` · until ${new Date(quote.response.quote.deadline).toLocaleTimeString()}`
+                    : ""}
+                </p>
+                <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                  To {shorten(recipient ?? "")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void send()}
+                disabled={blocker !== null || busy !== null}
+                className={`${buttonClass} mt-3 w-full bg-foreground text-background hover:opacity-90`}
+              >
+                {busy === "sign" ? "Confirm in wallet…" : `Send ${quote.response.quote.amountInFormatted} USDC`}
+              </button>
+            </div>
+          ) : null}
+
+          {tracked ? (
+            <div className="border-t border-border px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Status</p>
+                <p className="font-mono text-[11px] text-foreground/80">
+                  {status ? String(status.status) : "Waiting…"}
+                </p>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                {formatUsdc(BigInt(tracked.amountRaw))} USDC →{" "}
+                {tracked.destination === "solana-safe" ? "Solana Safe" : "Aptos"}{" "}
+                <span className="font-mono">{shorten(tracked.recipient)}</span>
+              </p>
               <a
-                className={linkClass}
-                href={tx.explorerUrl ?? (tracked.destination === "aptos" ? `https://explorer.aptoslabs.com/txn/${tx.hash}?network=mainnet` : `https://solscan.io/tx/${tx.hash}`)}
+                className={`${linkClass} mt-1 inline-block text-xs`}
+                href={`https://solscan.io/tx/${tracked.txSig}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {shorten(tx.hash)}
+                Tx {shorten(tracked.txSig)}
               </a>
-            </p>
-          ))}
-          {finalStatus === "SUCCESS" && delta !== null ? (
-            <p className={delta > BigInt(0) ? "text-success" : "text-danger"}>
-              Recipient balance changed by {delta >= BigInt(0) ? "+" : ""}
-              {formatUsdc(delta < BigInt(0) ? -delta : delta)} USDC
-              {delta > BigInt(0) ? "." : ". Check the payout transaction: the funds did not reach the expected account."}
-            </p>
+              {status?.swapDetails?.destinationChainTxHashes?.map((tx) => (
+                <p key={tx.hash} className="mt-1 text-xs">
+                  Payout{" "}
+                  <a
+                    className={linkClass}
+                    href={
+                      tx.explorerUrl ??
+                      (tracked.destination === "aptos"
+                        ? `https://explorer.aptoslabs.com/txn/${tx.hash}?network=mainnet`
+                        : `https://solscan.io/tx/${tx.hash}`)
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {shorten(tx.hash)}
+                  </a>
+                </p>
+              ))}
+              {finalStatus === "SUCCESS" && delta !== null ? (
+                <p className={`mt-2 text-xs ${delta > BigInt(0) ? "text-foreground" : "text-danger"}`}>
+                  Balance {delta >= BigInt(0) ? "+" : "-"}
+                  {formatUsdc(delta < BigInt(0) ? -delta : delta)} USDC
+                  {delta > BigInt(0) ? "" : " — check payout tx"}
+                </p>
+              ) : null}
+              {finalStatus === "REFUNDED" || finalStatus === "FAILED" ? (
+                <p className="mt-2 text-xs text-danger">
+                  {finalStatus}
+                  {status?.swapDetails?.refundReason ? `: ${status.swapDetails.refundReason}` : ""}
+                  {status?.swapDetails?.refundedAmountFormatted
+                    ? `, refunded ${status.swapDetails.refundedAmountFormatted} USDC`
+                    : ""}
+                </p>
+              ) : null}
+              {finalStatus ? (
+                <button
+                  type="button"
+                  onClick={clearTracked}
+                  className={`${buttonClass} mt-3 w-full border border-border hover:bg-muted`}
+                >
+                  Done
+                </button>
+              ) : null}
+            </div>
           ) : null}
-          {finalStatus === "REFUNDED" || finalStatus === "FAILED" ? (
-            <p className="text-danger">
-              {finalStatus}
-              {status?.swapDetails?.refundReason ? `: ${status.swapDetails.refundReason}` : ""}
-              {status?.swapDetails?.refundedAmountFormatted ? `, refunded ${status.swapDetails.refundedAmountFormatted} USDC` : ""}.
+
+          {error ? (
+            <p role="alert" className="border-t border-border px-4 py-3 text-xs text-danger">
+              {error}
             </p>
-          ) : null}
-          {finalStatus ? (
-            <button type="button" onClick={clearTracked} className={`${buttonClass} mt-3 border border-border hover:bg-muted`}>
-              Done
-            </button>
           ) : null}
         </div>
-      ) : null}
-
-      {error ? (
-        <p role="alert" className="px-5 py-4 text-sm text-danger">
-          {error}
-        </p>
       ) : null}
     </section>
   );

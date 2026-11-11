@@ -1,32 +1,250 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
-  --color-background: #f6f6f4;
-  --color-foreground: #171717;
-  --color-card: #ffffff;
-  --color-muted: #f0f0ec;
-  --color-muted-foreground: #5c5c5c;
-  --color-border: #e4e4df;
-  --color-primary: #171717;
-  --color-primary-foreground: #fafafa;
-  --color-warning: #fff6e6;
-  --color-warning-foreground: #6a4510;
-  --color-warning-border: #efd3a4;
-  --color-danger: #9f2d2d;
-  --color-ring: #171717;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-ring: var(--ring);
+  --color-glow: var(--glow);
+  --color-surface: var(--surface);
+}
+
+:root {
+  --background: #f4f6f9;
+  --foreground: #0c1422;
+  --card: rgba(255, 255, 255, 0.78);
+  --surface: rgba(255, 255, 255, 0.55);
+  --muted: #e8edf5;
+  --muted-foreground: #5a6880;
+  --border: rgba(12, 20, 34, 0.1);
+  --primary: #1f6feb;
+  --primary-foreground: #f8fbff;
+  --secondary: #e8edf5;
+  --secondary-foreground: #0c1422;
+  --accent: #dce8ff;
+  --accent-foreground: #0c1422;
+  --warning: #fff7e8;
+  --warning-foreground: #6a4510;
+  --warning-border: #efd3a4;
+  --danger: #b91c1c;
+  --ring: #1f6feb;
+  --glow: rgba(31, 111, 235, 0.16);
+  --grid-line: rgba(31, 111, 235, 0.07);
+  --atmosphere-1: rgba(31, 111, 235, 0.12);
+  --atmosphere-2: rgba(110, 180, 255, 0.1);
+  --panel-shadow: 0 24px 64px -32px rgba(20, 35, 60, 0.28);
+  --hairline: linear-gradient(90deg, transparent, rgba(31, 111, 235, 0.55), transparent);
+}
+
+.dark {
+  --background: #05070d;
+  --foreground: #e8eef7;
+  --card: rgba(12, 18, 30, 0.72);
+  --surface: rgba(255, 255, 255, 0.04);
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: #8b9bb3;
+  --border: rgba(255, 255, 255, 0.1);
+  --primary: #4d8dff;
+  --primary-foreground: #041018;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #e8eef7;
+  --accent: rgba(77, 141, 255, 0.16);
+  --accent-foreground: #e8eef7;
+  --warning: rgba(255, 176, 134, 0.12);
+  --warning-foreground: #ffd7b8;
+  --warning-border: rgba(255, 176, 134, 0.35);
+  --danger: #ff7b7b;
+  --ring: #4d8dff;
+  --glow: rgba(77, 141, 255, 0.22);
+  --grid-line: rgba(77, 141, 255, 0.08);
+  --atmosphere-1: rgba(77, 141, 255, 0.16);
+  --atmosphere-2: rgba(56, 189, 248, 0.08);
+  --panel-shadow: 0 28px 80px -36px rgba(0, 0, 0, 0.85);
+  --hairline: linear-gradient(90deg, transparent, rgba(77, 141, 255, 0.7), transparent);
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
+  min-height: 100dvh;
+  background:
+    radial-gradient(980px 520px at 82% -12%, var(--atmosphere-1), transparent 58%),
+    radial-gradient(760px 480px at 0% 100%, var(--atmosphere-2), transparent 55%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    var(--background);
+  background-size: auto, auto, 72px 72px, 72px 72px, auto;
+  color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: #171717;
-  color: #fafafa;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="radio"],
+input[type="checkbox"],
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+input:disabled {
+  cursor: not-allowed;
+}
+
+.panel-glass {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.panel-hairline::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 12%;
+  top: 0;
+  height: 1px;
+  background: var(--hairline);
+  opacity: 0.7;
+}
+
+.status-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 65%, transparent);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes gpt-chat-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gpt-chat-thinking-ring {
+  0% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+    opacity: 0.35;
+  }
+}
+
+@keyframes gpt-chat-thinking-ellipsis {
+  0%,
+  20% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes gpt-chat-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.gpt-chat-enter {
+  animation: gpt-chat-fade-in 200ms ease-out both;
+}
+
+.gpt-chat-thinking-ring {
+  border-top-color: color-mix(in oklab, var(--foreground) 55%, transparent);
+  animation: gpt-chat-thinking-ring 1.1s linear infinite;
+}
+
+.gpt-chat-thinking-ellipsis {
+  display: inline-block;
+  min-width: 1ch;
+  animation: gpt-chat-thinking-ellipsis 1.2s ease-in-out infinite;
+}
+
+.gpt-chat-header-shimmer {
+  background-size: 200% 100%;
+  animation: gpt-chat-shimmer 4.5s linear infinite;
+}
+
+.gpt-chat-md ul > li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0.62em;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--foreground) 45%, transparent);
+}
+
+.gpt-chat-md ol > li {
+  counter-increment: gpt-ol;
+}
+
+.gpt-chat-md ol > li::before {
+  content: counter(gpt-ol) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 500;
+  color: color-mix(in oklch, var(--foreground) 45%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

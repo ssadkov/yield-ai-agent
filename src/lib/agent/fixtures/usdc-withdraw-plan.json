@@ -1,0 +1,25 @@
+{
+  "_note": "Live Solana Safe API withdrawal plan for the pilot owner, 2026-11-11 (1 USDC from the Safe to the wallet). Public data only.",
+  "status": "ready",
+  "amountRaw": "1000000",
+  "blockhash": "2ApULKVaExRXmpjukBRgUPDWYqQ1scbaFtKftuSvoQoR",
+  "lastValidBlockHeight": 446139325,
+  "state": {
+    "owner": {
+      "type": "solana",
+      "address": "EP9fKzBpQzyZC2GYjjAF9tKEeUwi7dqNqMStmxdYu4h2"
+    },
+    "safe": "FuDCEZBgp8gxP3gafnHbUJRgGW63VAmtZwsjus1U5qSZ"
+  },
+  "steps": [
+    {
+      "id": "withdraw",
+      "kind": "withdraw",
+      "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAECMbUgCsmfrCF4Af9u+RpRuNvwTygtYL9TR/88hPPrKLN3WObQof/wo4micv9JKtqSscJcNGg+efNSgEnm77ghloX0gQ2RzDbamWU/fpBEW3Ri/6H7LosrFVEQH4D0z5eQ5a3cu1VW5GzsdjUOv73T8IVqOTWbeew3/lvVHtl6UNnAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAOh5sGneS5dbaJgHnqAGLAIfQMJA5kPmdjxxJlHKvPasb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkRX5cS8xncT2jBYRIcn8Mi0rvtiWcInQYEWFRbUnxfYAIEAAUCQA0DAAUGAAEGAgMHELcSRpyUbaEiQEIPAAAAAAAA",
+      "transactionVersion": 0,
+      "requiredSigners": [
+        "EP9fKzBpQzyZC2GYjjAF9tKEeUwi7dqNqMStmxdYu4h2"
+      ]
+    }
+  ]
+}

@@ -342,6 +342,11 @@ export function useAgentWallets() {
     solana.wallet?.adapter?.name ??
     (derivedChain === "solana" && aptos.wallet?.name ? derivedWalletSourceName(aptos.wallet.name) : null);
 
+  const walletIcon =
+    solana.wallet?.adapter?.icon ??
+    (derivedChain === "solana" ? aptos.wallet?.icon : undefined) ??
+    aptos.wallet?.icon;
+
   const aptosKind =
     derivedChain === "solana"
       ? `Derived from ${solanaWalletName ?? "your Solana wallet"}`
@@ -370,6 +375,7 @@ export function useAgentWallets() {
     solanaAddress,
     aptosKind,
     solanaWalletName,
+    walletIcon,
     derivedChain,
     aptosConnected: aptos.connected,
   };
