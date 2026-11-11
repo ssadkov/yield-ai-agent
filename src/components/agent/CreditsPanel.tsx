@@ -13,8 +13,9 @@ import {
   type PurchaseQuote,
 } from "@/lib/credits/client";
 import { buildUsdcDepositTx, panelConnections, withFallback } from "@/lib/agent/solanaSafe";
+import { PURCHASE_OPTIONS_USD } from "@/lib/credits/ledger";
 
-const AMOUNTS = [1, 5, 20] as const;
+const AMOUNTS = PURCHASE_OPTIONS_USD;
 const SOLANA_USDC = "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near";
 const SOLANA_SOL = "nep141:sol.omft.near";
 const FINAL = new Set(["SUCCESS", "REFUNDED", "FAILED"]);
@@ -38,7 +39,7 @@ export function CreditsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState<number>(1);
+  const [amount, setAmount] = useState<number>(PURCHASE_OPTIONS_USD[0]);
   const [asset, setAsset] = useState(SOLANA_USDC);
   const [refundTo, setRefundTo] = useState("");
   const [quote, setQuote] = useState<PurchaseQuote | null>(null);

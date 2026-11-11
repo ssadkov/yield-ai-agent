@@ -55,6 +55,10 @@ export function estimateRequestUsd(maxTokens: number, outputUsdPerMillion = 0.5,
   return inputUsd + (maxTokens * outputUsdPerMillion) / 1_000_000;
 }
 
-/** Whole-cent dollar amount a user may buy in one purchase. */
-export const PURCHASE_OPTIONS_USD = [1, 5, 20] as const;
+/**
+ * Whole-dollar purchase sizes. 1-Click's route costs about $0.23 whatever the size (2026-11-11:
+ * $1 of credits cost 1.232 USDC, $5 cost 5.061), so $5 is the smallest that makes sense.
+ */
+export const PURCHASE_OPTIONS_USD = [5, 10, 20] as const;
+export const MIN_PURCHASE_USD = 5;
 export const MAX_PURCHASE_USD = 50;

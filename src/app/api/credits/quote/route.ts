@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { creditsEnabled, insertPurchase } from "@/lib/credits/db";
-import { MAX_PURCHASE_USD } from "@/lib/credits/ledger";
+import { MAX_PURCHASE_USD, MIN_PURCHASE_USD } from "@/lib/credits/ledger";
 import { ONE_CLICK, PAYMENT_ASSETS, purchaseDestination } from "@/lib/credits/service";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const amountUsd = Number(body?.amountUsd);
-  if (!Number.isInteger(amountUsd) || amountUsd < 1 || amountUsd > MAX_PURCHASE_USD) {
-    return refuse(400, `amountUsd must be a whole number 1..${MAX_PURCHASE_USD}`);
+  if (!Number.isInteger(amountUsd) || amountUsd < MIN_PURCHASE_USD || amountUsd > MAX_PURCHASE_USD) {
+    return refuse(400, `amountUsd must be a whole number ${MIN_PURCHASE_USD}..${MAX_PURCHASE_USD}`);
   }
   const asset = PAYMENT_ASSETS.find((a) => a.id === body?.originAsset);
   if (!asset) return refuse(400, "Unsupported payment asset");
