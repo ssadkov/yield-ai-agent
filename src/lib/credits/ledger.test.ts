@@ -1,7 +1,21 @@
 // Run with `pnpm test` (Node's built-in runner; Node 22.18+ strips the types).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeBalance, estimateRequestUsd, monthKey } from "./ledger.ts";
+import { computeBalance, estimateRequestUsd, monthKey, purchaseAmountUnits } from "./ledger.ts";
+
+test("purchase amounts: any cents from $1 to $50", () => {
+  assert.deepEqual(purchaseAmountUnits(1), { usd: 1, units: "1000000" });
+  assert.deepEqual(purchaseAmountUnits("2.5"), { usd: 2.5, units: "2500000" });
+  assert.deepEqual(purchaseAmountUnits(1.1), { usd: 1.1, units: "1100000" });
+  assert.deepEqual(purchaseAmountUnits(50), { usd: 50, units: "50000000" });
+  assert.equal(purchaseAmountUnits(0.99), null);
+  assert.equal(purchaseAmountUnits(50.01), null);
+  assert.equal(purchaseAmountUnits(1.005), null);
+  assert.equal(purchaseAmountUnits("abc"), null);
+  assert.equal(purchaseAmountUnits(""), null);
+  assert.equal(purchaseAmountUnits(null), null);
+  assert.equal(purchaseAmountUnits(Infinity), null);
+});
 
 const now = new Date("2026-11-11T10:00:00Z");
 
