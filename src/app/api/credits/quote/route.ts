@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { creditsEnabled, insertPurchase } from "@/lib/credits/db";
-import { MAX_PURCHASE_USD, MIN_PURCHASE_USD } from "@/lib/credits/ledger";
+import { MAX_PURCHASE_USD, MIN_PURCHASE_USD, purchaseAmountUnits } from "@/lib/credits/ledger";
 import { ONE_CLICK, PAYMENT_ASSETS, purchaseDestination } from "@/lib/credits/service";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
@@ -30,16 +30,15 @@ export async function POST(request: Request) {
   if (!wallet) return refuse(401, "Sign in with your wallet first");
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const amountUsd = Number(body?.amountUsd);
-  if (!Number.isInteger(amountUsd) || amountUsd < MIN_PURCHASE_USD || amountUsd > MAX_PURCHASE_USD) {
-    return refuse(400, `amountUsd must be a whole number ${MIN_PURCHASE_USD}..${MAX_PURCHASE_USD}`);
-  }
+  const amount = purchaseAmountUnits(body?.amountUsd, destination.decimals);
+  if (!amount) return refuse(400, `amountUsd must be $${MIN_PURCHASE_USD}..$${MAX_PURCHASE_USD}, to the cent`);
+  const amountUsd = amount.usd;
   const asset = PAYMENT_ASSETS.find((a) => a.id === body?.originAsset);
   if (!asset) return refuse(400, "Unsupported payment asset");
   const refundTo = asset.chain === "solana" ? wallet : typeof body?.refundTo === "string" ? body.refundTo.trim() : "";
   if (!refundTo) return refuse(400, `A ${asset.chain} refund address is required`);
 
-  const amountOut = String(BigInt(amountUsd) * BigInt(10) ** BigInt(destination.decimals));
+  const amountOut = amount.units;
   let quote: Record<string, unknown>;
   try {
     const response = await fetch(`${ONE_CLICK}/quote`, {

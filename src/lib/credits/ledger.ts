@@ -69,9 +69,22 @@ export function estimateRequestUsd(maxTokens: number, outputUsdPerMillion = 0.5,
 }
 
 /**
- * Whole-dollar purchase sizes. 1-Click's route costs about $0.23 whatever the size (2026-11-11:
- * $1 of credits cost 1.232 USDC, $5 cost 5.061), so $5 is the smallest that makes sense.
+ * Purchase sizes: any amount from $1 to $50, to the cent. The 1-Click route cost is small
+ * (2026-11-11, paying with Solana USDC: $1 of credits cost 1.020 USDC, $5 cost 5.061).
  */
-export const PURCHASE_OPTIONS_USD = [5, 10, 20] as const;
-export const MIN_PURCHASE_USD = 5;
+export const PURCHASE_OPTIONS_USD = [1, 5, 10, 20] as const;
+export const MIN_PURCHASE_USD = 1;
 export const MAX_PURCHASE_USD = 50;
+
+/**
+ * A purchase amount in the destination token's base units (USDC: 6 decimals), or null when it is
+ * not a whole number of cents within MIN..MAX. Exact: `1.1` is 110 cents, never 1.0999….
+ */
+export function purchaseAmountUnits(amountUsd: unknown, decimals = 6): { usd: number; units: string } | null {
+  const value = typeof amountUsd === "number" ? amountUsd : typeof amountUsd === "string" && amountUsd.trim() ? Number(amountUsd) : NaN;
+  if (!Number.isFinite(value) || decimals < 2) return null;
+  const cents = Math.round(value * 100);
+  if (Math.abs(value * 100 - cents) > 1e-6) return null;
+  if (cents < MIN_PURCHASE_USD * 100 || cents > MAX_PURCHASE_USD * 100) return null;
+  return { usd: cents / 100, units: String(BigInt(cents) * BigInt(10) ** BigInt(decimals - 2)) };
+}

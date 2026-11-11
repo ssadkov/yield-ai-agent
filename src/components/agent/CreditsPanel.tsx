@@ -13,7 +13,7 @@ import {
   type PurchaseQuote,
 } from "@/lib/credits/client";
 import { buildUsdcDepositTx, panelConnections, withFallback } from "@/lib/agent/solanaSafe";
-import { PURCHASE_OPTIONS_USD } from "@/lib/credits/ledger";
+import { MAX_PURCHASE_USD, MIN_PURCHASE_USD, PURCHASE_OPTIONS_USD, purchaseAmountUnits } from "@/lib/credits/ledger";
 
 const AMOUNTS = PURCHASE_OPTIONS_USD;
 const SOLANA_USDC = "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near";
@@ -39,7 +39,7 @@ export function CreditsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState<number>(PURCHASE_OPTIONS_USD[0]);
+  const [amountText, setAmountText] = useState<string>(String(PURCHASE_OPTIONS_USD[0]));
   const [asset, setAsset] = useState(SOLANA_USDC);
   const [refundTo, setRefundTo] = useState("");
   const [quote, setQuote] = useState<PurchaseQuote | null>(null);
@@ -68,6 +68,7 @@ export function CreditsPanel() {
   const signedInAs = loadSession(wallet)?.wallet ?? null;
   const selected = state.paymentAssets?.find((a) => a.id === asset);
   const walletPays = selected?.chain === "solana";
+  const amount = purchaseAmountUnits(amountText.replace(",", "."))?.usd ?? null;
 
   const poll = (depositAddress: string) => {
     const tick = async () => {
@@ -101,6 +102,7 @@ export function CreditsPanel() {
   };
 
   const doQuote = async () => {
+    if (amount === null) return setError(`Enter $${MIN_PURCHASE_USD}–$${MAX_PURCHASE_USD}, to the cent.`);
     setBusy("quote");
     setError(null);
     setQuote(null);
@@ -208,7 +210,10 @@ export function CreditsPanel() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setAmount(value)}
+                    onClick={() => {
+                      setAmountText(String(value));
+                      setQuote(null);
+                    }}
                     className={[
                       "h-7 rounded-full border px-2.5",
                       amount === value ? "border-foreground/50 bg-background" : "border-border text-muted-foreground",
@@ -217,6 +222,19 @@ export function CreditsPanel() {
                     ${value}
                   </button>
                 ))}
+                <label className="inline-flex h-7 items-center rounded-full border border-border bg-background pl-2.5">
+                  $
+                  <input
+                    value={amountText}
+                    onChange={(event) => {
+                      setAmountText(event.target.value);
+                      setQuote(null);
+                    }}
+                    inputMode="decimal"
+                    aria-label={`Amount in dollars, ${MIN_PURCHASE_USD} to ${MAX_PURCHASE_USD}`}
+                    className="h-full w-14 rounded-full bg-transparent px-1 outline-none"
+                  />
+                </label>
                 <select
                   value={asset}
                   onChange={(event) => {
@@ -243,11 +261,15 @@ export function CreditsPanel() {
               ) : null}
               <button
                 type="button"
-                disabled={busy !== null || (!walletPays && !refundTo.trim())}
+                disabled={busy !== null || amount === null || (!walletPays && !refundTo.trim())}
                 onClick={() => void doQuote()}
                 className="inline-flex h-7 items-center rounded-full bg-primary px-3 font-medium text-primary-foreground disabled:opacity-40"
               >
-                {busy === "quote" ? "Quoting…" : `Get ${usd(amount)} of credits`}
+                {busy === "quote"
+                  ? "Quoting…"
+                  : amount === null
+                    ? `Enter $${MIN_PURCHASE_USD}–$${MAX_PURCHASE_USD}`
+                    : `Get ${usd(amount)} of credits`}
               </button>
               {quote ? (
                 <div className="rounded-lg border border-border/70 bg-background/70 p-2">
