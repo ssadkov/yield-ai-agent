@@ -10,10 +10,14 @@ import {
   formatChatDepositAmount,
   formatChatDepositUsdc,
   pollChatDepositStatus,
+  SafeMissingError,
   type ChatDepositPhase,
   type ChatDepositTracked,
 } from "@/lib/agent/chatDeposit";
 import type { OneClickStatusResponse } from "@/lib/agent/oneClick";
+import { CreateSafeStep, KaminoStep } from "@/components/agent/SafeSteps";
+
+const KAMINO_STRATEGY_ID = "solana:kamino_usdc";
 
 const POLL_MS = 5_000;
 
@@ -39,6 +43,8 @@ export function ActionCard({ card }: { card: ActionCardData }) {
   const [status, setStatus] = useState<OneClickStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [needsSafe, setNeedsSafe] = useState(false);
+  const [fundedDirectly, setFundedDirectly] = useState(false);
   const pollTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -48,6 +54,8 @@ export function ActionCard({ card }: { card: ActionCardData }) {
     setStatus(null);
     setError(null);
     setNote(null);
+    setNeedsSafe(false);
+    setFundedDirectly(false);
   }, [card.action, card.amountUsdc, card.note]);
 
   useEffect(() => {
@@ -155,6 +163,11 @@ export function ActionCard({ card }: { card: ActionCardData }) {
                 setStatus(null);
                 startPolling(result.tracked);
               } catch (err) {
+                if (err instanceof SafeMissingError) {
+                  setPhase("idle");
+                  setNeedsSafe(true);
+                  return;
+                }
                 setPhase("error");
                 setError(chatDepositErrorText(err));
               }
@@ -192,6 +205,26 @@ export function ActionCard({ card }: { card: ActionCardData }) {
         </p>
       ) : null}
       {note ? <p className="mt-2 text-[11px] leading-relaxed text-foreground/80">{note}</p> : null}
+
+      {isDeposit && needsSafe ? (
+        <CreateSafeStep
+          amountInput={amount.trim().replace(",", ".")}
+          onCreated={({ withDeposit }) => {
+            setNeedsSafe(false);
+            if (withDeposit) {
+              setFundedDirectly(true);
+              setPhase("done");
+              setNote("Safe created and funded from your wallet.");
+            } else {
+              setNote("Safe created. Press Deposit to fund it through NEAR Intents.");
+            }
+          }}
+        />
+      ) : null}
+
+      {isDeposit && (fundedDirectly || (phase === "done" && status?.status === "SUCCESS") || card.strategyId === KAMINO_STRATEGY_ID) ? (
+        <KaminoStep suggestedUsdc={parsed ?? card.amountUsdc} />
+      ) : null}
     </div>
   );
 }

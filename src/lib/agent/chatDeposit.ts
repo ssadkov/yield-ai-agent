@@ -39,6 +39,14 @@ export type ChatDepositTracked = {
 
 export type ChatDepositPhase = "idle" | "preparing" | "quoting" | "signing" | "tracking" | "done" | "error";
 
+/** The wallet has no Solana Safe yet; the card offers to create one (src/lib/agent/safePlans.ts). */
+export class SafeMissingError extends Error {
+  constructor() {
+    super("This wallet has no Solana Safe yet.");
+    this.name = "SafeMissingError";
+  }
+}
+
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -103,7 +111,7 @@ export async function executeChatDeposit(args: ExecuteChatDepositArgs): Promise<
     throw new Error(`This wallet holds ${formatUsdc(safe.walletUsdcRaw)} USDC on Solana.`);
   }
   if (!safe.safeExists) {
-    throw new Error("This wallet has no Solana Safe yet. Create it in the Yield AI Solana app first.");
+    throw new SafeMissingError();
   }
   if (!safe.safeUsdcAtaExists) {
     throw new Error("The Safe has no USDC account yet. Re-open it in the Safe app so it is created.");

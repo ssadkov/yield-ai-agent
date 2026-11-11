@@ -16,7 +16,9 @@ import {
   type AdvisorSession,
   type UiMessage,
 } from "@/lib/advisor/runTurn";
-import type { AttestationSummary } from "@/lib/advisor/nearProxy";
+import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
+import { AnswerProofLine } from "@/components/agent/AnswerProofLine";
+import { AiPoolMeter, rememberInferenceIds } from "@/components/agent/AiPoolMeter";
 
 const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
 
@@ -77,6 +79,7 @@ export function AdvisorChatShell() {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [attestation, setAttestation] = useState<AttestationSummary | null>(null);
+  const [checking, setChecking] = useState<Set<string>>(() => new Set());
   const sessionRef = useRef<AdvisorSession | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamId, setStreamId] = useState<string | null>(null);
@@ -142,6 +145,7 @@ export function AdvisorChatShell() {
         },
       });
       setModel(result.model);
+      rememberInferenceIds(result.inferenceIds);
       setMessages((prev) =>
         prev.map((message) =>
           message.id === nextStreamId
@@ -154,6 +158,15 @@ export function AdvisorChatShell() {
             : message
         )
       );
+      setChecking((prev) => new Set(prev).add(nextStreamId));
+      void verifyAnswer(session.attested, result.evidence).then((proof) => {
+        setChecking((prev) => {
+          const next = new Set(prev);
+          next.delete(nextStreamId);
+          return next;
+        });
+        setMessages((prev) => prev.map((message) => (message.id === nextStreamId ? { ...message, proof } : message)));
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Chat failed";
       setError(message);
@@ -309,6 +322,13 @@ export function AdvisorChatShell() {
                       </div>
                     ) : null}
                     {message.actionCard ? <ActionCard card={message.actionCard} /> : null}
+                    {message.proof || checking.has(message.id) ? (
+                      <AnswerProofLine
+                        proof={message.proof ?? "checking"}
+                        attestation={attestation}
+                        model={model}
+                      />
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -326,6 +346,8 @@ export function AdvisorChatShell() {
 
         <div ref={bottomRef} />
       </div>
+
+      <AiPoolMeter />
 
       <form
         className="px-3 pb-3 pt-1 sm:px-4 sm:pb-4"

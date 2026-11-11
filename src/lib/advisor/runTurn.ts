@@ -3,8 +3,10 @@ import {
   createSessionKeys,
   pickAttestedModel,
   streamChatCompletion,
+  type AnswerProof,
   type AttestedModel,
   type ChatMessage,
+  type CompletionEvidence,
 } from "@/lib/advisor/nearProxy";
 import type { ClientKeys } from "@/lib/advisor/e2ee";
 import {
@@ -22,6 +24,8 @@ export type UiMessage = {
   content: string;
   plan?: ProposedPlan;
   actionCard?: ActionCard;
+  /** Response-signature check for this answer; checked in this browser, not restored from history. */
+  proof?: AnswerProof;
 };
 
 export type AdvisorSession = {
@@ -53,10 +57,21 @@ export async function runAdvisorTurn(options: {
   userText: string;
   onAssistantDelta?: (text: string) => void;
   onStatus?: (status: string) => void;
-}): Promise<{ assistantText: string; plan: ProposedPlan | null; actionCard: ActionCard | null; model: string }> {
+}): Promise<{
+  assistantText: string;
+  plan: ProposedPlan | null;
+  actionCard: ActionCard | null;
+  model: string;
+  /** NEAR AI `inference-id` of every completion in this turn, for cost metering. */
+  inferenceIds: string[];
+  /** Exact bytes of every completion in this turn, for the response-signature check. */
+  evidence: CompletionEvidence[];
+}> {
   const { session, userText, onAssistantDelta, onStatus } = options;
   session.history.push({ role: "user", content: userText });
 
+  const inferenceIds: string[] = [];
+  const evidence: CompletionEvidence[] = [];
   let plan: ProposedPlan | null = null;
   let actionCard: ActionCard | null = null;
   let finalText = "";
@@ -75,6 +90,8 @@ export async function runAdvisorTurn(options: {
         },
       },
     });
+    if (result.inferenceId) inferenceIds.push(result.inferenceId);
+    if (result.evidence) evidence.push(result.evidence);
 
     if (result.toolCalls.length === 0) {
       finalText = result.text || finalText;
@@ -105,6 +122,7 @@ export async function runAdvisorTurn(options: {
               if (!actionCard) {
                 actionCard = { action: "deposit", amountUsdc: checked.plan.amountUsdc, note: checked.plan.rationale };
               }
+              actionCard = { ...actionCard, strategyId: checked.plan.strategyId };
             }
           }
         } catch {
@@ -136,6 +154,8 @@ export async function runAdvisorTurn(options: {
     plan,
     actionCard,
     model: session.attested.model,
+    inferenceIds,
+    evidence,
   };
 }
 
