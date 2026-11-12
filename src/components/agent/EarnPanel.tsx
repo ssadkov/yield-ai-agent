@@ -38,7 +38,8 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-type Done = { label: string; signature: string };
+/** A landed transaction; `sentRaw` is the USDC it sent to the wallet, when it did. */
+type Done = { label: string; signature: string; sentRaw?: bigint };
 type Source = "wallet" | "intents";
 
 /** Live Kamino USDC APY from /agent/api/usdc-yields; null while unknown. Retries while missing. */
@@ -130,6 +131,8 @@ export function EarnPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done[]>([]);
+  /** The last withdrawal's transactions, for the "back in your wallet" view. */
+  const [withdrawn, setWithdrawn] = useState<Done[] | null>(null);
   /** Where the running action is, so a stall shows whether it waits for the API, the wallet or the chain. */
   const [stage, setStage] = useState<"preparing" | "wallet" | "confirming" | null>(null);
 
@@ -160,6 +163,7 @@ export function EarnPanel() {
   const closeDialog = useCallback(() => {
     setDialog(null);
     setError(null);
+    setWithdrawn(null);
   }, []);
 
   if (!owner) return null;
@@ -189,7 +193,7 @@ export function EarnPanel() {
   };
 
   /** Run one action; on success record its transactions and reload. */
-  const run = async (id: string, action: () => Promise<Done[]>, after?: () => void) => {
+  const run = async (id: string, action: () => Promise<Done[]>, after?: (results: Done[]) => void) => {
     setBusy(id);
     setStage("preparing");
     setError(null);
@@ -197,7 +201,7 @@ export function EarnPanel() {
       const results = await action();
       setDone((prev) => [...results, ...prev].slice(0, 6));
       await refresh(true);
-      after?.();
+      after?.(results);
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -262,12 +266,16 @@ export function EarnPanel() {
     });
 
   const withdrawIdle = () =>
-    run("withdraw-idle", async () => {
-      const plan = await requestWithdrawPlan(owner, "all");
-      if (plan.status === "empty") throw new Error("Nothing idle to withdraw.");
-      const planned = BigInt(plan.amountRaw ?? "0");
-      return [{ label: `${formatUsdc(planned)} USDC → wallet`, signature: await sign(plan, "withdraw", planned) }];
-    });
+    run(
+      "withdraw-idle",
+      async () => {
+        const plan = await requestWithdrawPlan(owner, "all");
+        if (plan.status === "empty") throw new Error("Nothing idle to withdraw.");
+        const planned = BigInt(plan.amountRaw ?? "0");
+        return [{ label: `${formatUsdc(planned)} USDC → wallet`, signature: await sign(plan, "withdraw", planned), sentRaw: planned }];
+      },
+      setWithdrawn
+    );
 
   /** Kamino exit: redeem shares into the Safe (program takes its fee), then send that USDC to the wallet. */
   const exitKamino = (percent: string) =>
@@ -291,13 +299,13 @@ export function EarnPanel() {
       if (!ret) throw new Error('Redeemed; use "Withdraw idle" to send the USDC to the wallet.');
       if (ret.status === "ready") {
         const net = BigInt(ret.amountRaw ?? "0");
-        results.push({ label: `${formatUsdc(net)} USDC → wallet`, signature: await sign(ret, "withdraw", net) });
+        results.push({ label: `${formatUsdc(net)} USDC → wallet`, signature: await sign(ret, "withdraw", net), sentRaw: net });
       }
       if (redeem.remainingTargetSharesRaw && BigInt(redeem.remainingTargetSharesRaw) > BigInt(0)) {
         setError("Kamino liquidity covered only part of it this time; press again for the rest.");
       }
       return results;
-    });
+    }, setWithdrawn);
 
   const disabled = busy !== null;
   const btn =
@@ -380,7 +388,10 @@ export function EarnPanel() {
             Deposit
           </button>
           {hasMoney ? (
-            <button type="button" disabled={disabled} onClick={() => setDialog("withdraw")} className={secondary}>
+            <button type="button" disabled={disabled} onClick={() => {
+                setWithdrawn(null);
+                setDialog("withdraw");
+              }} className={secondary}>
               Withdraw
             </button>
           ) : null}
@@ -536,6 +547,34 @@ export function EarnPanel() {
 
       {dialog === "withdraw" && s ? (
         <Modal title="Withdraw to wallet" onClose={closeDialog}>
+          {withdrawn ? (
+            <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-3">
+              <p className="text-[15px] font-medium">
+                ✓{" "}
+                {formatUsdc(withdrawn.reduce((sum, item) => sum + (item.sentRaw ?? BigInt(0)), BigInt(0)))} USDC is back in your
+                wallet
+              </p>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">
+                Wallet now: {usd(s.walletUsdc, 6)} USDC
+                {hasMoney ? ` · still earning: ${usd(total, 6)} USDC` : " · nothing left in your account"}
+              </p>
+              <ul className="mt-2 space-y-0.5 text-[12px] text-muted-foreground">
+                {withdrawn.map((item) => (
+                  <li key={item.signature}>
+                    {item.label} ·{" "}
+                    <a href={`https://solscan.io/tx/${item.signature}`} target="_blank" rel="noreferrer" className="underline">
+                      {short(item.signature)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {!hasMoney ? (
+                <button type="button" onClick={closeDialog} className={`${primary} mt-3 w-full`}>
+                  Done
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {inKamino > 0 ? (
             <div>
               <p className="text-[14px]">
@@ -567,7 +606,7 @@ export function EarnPanel() {
               </button>
             </div>
           ) : null}
-          {!hasMoney ? <p className="text-[14px] text-muted-foreground">Nothing to withdraw.</p> : null}
+          {!hasMoney && !withdrawn ? <p className="text-[14px] text-muted-foreground">Nothing to withdraw.</p> : null}
           {errorLine}
         </Modal>
       ) : null}
