@@ -17,6 +17,7 @@ import {
   type UiMessage,
 } from "@/lib/advisor/runTurn";
 import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
+import { setAdvisorWallet } from "@/lib/advisor/tools";
 import {
   DEFAULT_ADVISOR_MODEL,
   advisorModelShortLabel,
@@ -232,6 +233,8 @@ export function AdvisorChatShell() {
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []
   );
+  // The advisor's get_my_account tool reads the connected wallet's Safe.
+  useEffect(() => setAdvisorWallet(credits.wallet), [credits.wallet]);
 
   const messages = histories[mode];
 

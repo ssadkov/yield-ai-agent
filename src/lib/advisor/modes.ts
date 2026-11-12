@@ -70,9 +70,10 @@ export const CHAT_MODE_PLACEHOLDER: Record<ChatMode, string> = {
 };
 
 export const ADVISOR_SUGGESTIONS = [
-  "Where should I put 100 USDC on Solana?",
-  "What’s the best USDC yield right now?",
-  "Explain Kamino vs Exponent for USDC",
+  "How does my yield pay for private AI?",
+  "I have USDC on Base. How do I earn on it here?",
+  "Where should I put 100 USDC, and what are the risks?",
+  "What’s in my wallet, and what should I do with it?",
 ] as const;
 
 export const FREE_SUGGESTIONS = [

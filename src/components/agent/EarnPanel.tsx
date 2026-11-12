@@ -17,7 +17,7 @@ import {
 } from "@/lib/agent/safePlans";
 import { formatUsdc, panelConnections, parseUsdc, withFallback } from "@/lib/agent/solanaSafe";
 import type { SafeSummary } from "@/lib/agent/safeSummary";
-import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
+import { AnyChainDeposit } from "@/components/agent/AnyChainDeposit";
 import { TickingNumber } from "@/components/agent/TickingNumber";
 import { TOKENS_PER_USD, TYPICAL_REQUEST_USD } from "@/lib/advisor/aiPool";
 
@@ -534,11 +534,8 @@ export function EarnPanel() {
               </button>
             </div>
           ) : (
-            <div className="mt-4 space-y-2">
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
-                Pay from any chain or token; NEAR Intents delivers USDC to your account. Then press “Put it to work” on the card.
-              </p>
-              <IntentsDepositPanel aptosAddress={null} aptosIsDerived={false} embedded />
+            <div className="mt-4">
+              <AnyChainDeposit onLanded={() => void refresh(true)} />
             </div>
           )}
           {errorLine}
