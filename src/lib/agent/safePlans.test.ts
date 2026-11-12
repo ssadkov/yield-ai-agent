@@ -11,7 +11,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { PlanCheckError, REVIEWED_EXECUTOR, checkPlanTransaction } from "./safePlans.ts";
+import { KAMINO_SHARES_MINT, PlanCheckError, REVIEWED_EXECUTOR, checkPlanTransaction, kaminoSharesAta } from "./safePlans.ts";
 import { SAFE_PROGRAM_ID, USDC_MINT, safeAddress, usdcAta } from "./solanaSafe.ts";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/kamino-deposit-plan.json", import.meta.url), "utf8"));
@@ -193,4 +193,42 @@ test("a Kamino redeem burns the expected shares and may create only the treasury
   const other = Keypair.generate().publicKey;
   const wrongTreasury = createTx(owner, [createAtaIx(owner, usdcAta(other), other, USDC_MINT), redeem]);
   assert.throws(() => checkPlanTransaction(wrongTreasury, { owner, kind: "kamino_redeem", amountRaw: shares, treasury }), PlanCheckError);
+});
+
+const SET_ALLOCATION = [119, 81, 22, 4, 114, 187, 23, 145];
+const KAMINO_DEPOSIT = [237, 8, 188, 187, 115, 99, 49, 85];
+
+test("Kamino share account address matches a live first-deposit plan", () => {
+  // Live plan 2026-11-13 for Safe Gq7om9…3g3b created its share account 2ZHJm8…fPUt.
+  assert.equal(
+    kaminoSharesAta(new PublicKey("Gq7om9Z1DKeXLvV6UqE36tHMMHePZuHFr4oj2Qmd3g3b")).toBase58(),
+    "2ZHJm82hQ6z85unymGcpJbt6pK3yKW4Xy23Ez53vfPUt"
+  );
+});
+
+test("a first Kamino deposit may create the Safe's own share account, and nothing else", () => {
+  const owner = Keypair.generate().publicKey;
+  const safe = safeAddress(owner);
+  const amount = BigInt(1_000_000);
+  const body = [
+    safeIx(owner, Buffer.from([...SET_ALLOCATION, 0, 0])),
+    safeIx(owner, u64Data(KAMINO_DEPOSIT, amount)),
+    safeIx(owner, Buffer.from([...SET_ALLOCATION, 0, 0])),
+  ];
+  const ok = createTx(owner, [createAtaIx(owner, kaminoSharesAta(safe), safe, KAMINO_SHARES_MINT), ...body]);
+  checkPlanTransaction(ok, { owner, kind: "kamino_deposit", amountRaw: amount });
+
+  const stranger = Keypair.generate().publicKey;
+  const strangers = createTx(owner, [createAtaIx(owner, kaminoSharesAta(stranger), stranger, KAMINO_SHARES_MINT), ...body]);
+  assert.throws(() => checkPlanTransaction(strangers, { owner, kind: "kamino_deposit", amountRaw: amount }), PlanCheckError);
+
+  const usdcInstead = createTx(owner, [createAtaIx(owner, usdcAta(safe), safe, USDC_MINT), ...body]);
+  assert.throws(() => checkPlanTransaction(usdcInstead, { owner, kind: "kamino_deposit", amountRaw: amount }), PlanCheckError);
+
+  // A plain wallet → Safe deposit still may not create the share account.
+  const wrongKind = createTx(owner, [
+    createAtaIx(owner, kaminoSharesAta(safe), safe, KAMINO_SHARES_MINT),
+    safeIx(owner, depositData(amount)),
+  ]);
+  assert.throws(() => checkPlanTransaction(wrongKind, { owner, kind: "deposit", amountRaw: amount }), PlanCheckError);
 });
