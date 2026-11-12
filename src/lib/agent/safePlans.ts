@@ -97,9 +97,10 @@ function checkAccountCreation(
   const ata = at(1);
   const holder = at(2);
   const match = allowed.find((a) => ata?.equals(a.ata) && holder?.equals(a.holder));
-  // The share mint sits in the plan's lookup table; the ATA address is derived from holder, token
-  // program and mint, so a matching address already pins the mint. USDC accounts are checked as before.
-  const mintOk = match && (match.mint === null || Boolean(at(3)?.equals(match.mint)));
+  // The ATA address is derived from holder, token program and mint, so a matching address already
+  // pins the mint. The API may load the mint from its lookup table; when it is a static key, check it too.
+  const mint = at(3);
+  const mintOk = match && (match.mint === null || mint === null || mint.equals(match.mint));
   if (!isCreateIdempotent || !payer?.equals(owner) || !match || !mintOk) {
     throw new PlanCheckError("The plan creates a token account other than the expected one.");
   }
