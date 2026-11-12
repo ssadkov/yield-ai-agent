@@ -337,6 +337,22 @@ export async function readSafeTreasury(connection: Connection): Promise<PublicKe
   return new PublicKey(info.data.subarray(40, 72));
 }
 
+/** Whether a sent transaction is on chain: polls its status for up to ~30 s. */
+async function signatureLanded(connection: Connection, signature: string): Promise<"ok" | "failed" | "unknown"> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      const { value } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+      const status = value[0];
+      if (status?.err) return "failed";
+      if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") return "ok";
+    } catch {
+      /* try again */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+  return "unknown";
+}
+
 /** Check the plan, have the wallet sign and send it, and wait for confirmation. */
 export async function signAndSendPlan(options: {
   plan: SafePlan;
@@ -358,11 +374,26 @@ export async function signAndSendPlan(options: {
   const signature = await sendTransaction(tx, connection);
   onStage?.("confirming");
   if (plan.blockhash && plan.lastValidBlockHeight) {
-    const result = await connection.confirmTransaction(
-      { signature, blockhash: plan.blockhash, lastValidBlockHeight: plan.lastValidBlockHeight },
-      "confirmed"
-    );
-    if (result.value.err) throw new Error(`Transaction failed: ${JSON.stringify(result.value.err)}`);
+    let failure: unknown = null;
+    try {
+      const result = await connection.confirmTransaction(
+        { signature, blockhash: plan.blockhash, lastValidBlockHeight: plan.lastValidBlockHeight },
+        "confirmed"
+      );
+      if (result.value.err) throw new Error(`Transaction failed: ${JSON.stringify(result.value.err)}`);
+    } catch (error) {
+      failure = error;
+    }
+    if (failure) {
+      // The wait can fail (RPC hiccup, expired block height) after the transaction already landed:
+      // ask the chain directly before reporting an error.
+      const landed = await signatureLanded(connection, signature);
+      if (landed === "failed" || landed === "unknown") {
+        throw failure instanceof Error && landed === "unknown"
+          ? new Error(`${failure.message} Check the transaction: https://solscan.io/tx/${signature}`)
+          : failure;
+      }
+    }
   }
   return signature;
 }
