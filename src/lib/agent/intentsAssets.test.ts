@@ -15,3 +15,16 @@ test("anything else is refused", () => {
     assert.equal(toBaseUnits(bad, 6), null, bad);
   }
 });
+
+test("every asset is listed once and has a logo file", async () => {
+  const { existsSync } = await import("node:fs");
+  const { INTENTS_ASSETS, INTENTS_NETWORKS } = await import("./intentsAssets.ts");
+  const ids = INTENTS_ASSETS.map((a) => a.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const item of [...INTENTS_ASSETS, ...INTENTS_NETWORKS]) {
+    const file = new URL(`../../../public${item.logo.replace(/^\/agent/, "")}`, import.meta.url);
+    assert.ok(existsSync(file), `${item.label}: ${item.logo}`);
+  }
+  // Solana assets are paid by the connected wallet; the code keys that on chain === "solana".
+  assert.ok(INTENTS_ASSETS.filter((a) => a.chain === "solana").length >= 2);
+});

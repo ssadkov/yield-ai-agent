@@ -14,6 +14,8 @@ import {
 } from "@/lib/credits/client";
 import { buildUsdcDepositTx, panelConnections, withFallback } from "@/lib/agent/solanaSafe";
 import { AiPoolMeter } from "@/components/agent/AiPoolMeter";
+import { AssetPicker } from "@/components/agent/AssetPicker";
+import { INTENTS_ASSETS, networkOf } from "@/lib/agent/intentsAssets";
 import { MAX_PURCHASE_USD, MIN_PURCHASE_USD, PURCHASE_OPTIONS_USD, purchaseAmountUnits } from "@/lib/credits/ledger";
 
 const AMOUNTS = PURCHASE_OPTIONS_USD;
@@ -72,8 +74,10 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
   if (!state?.enabled) return null;
 
   const signedInAs = loadSession(wallet)?.wallet ?? null;
-  const selected = state.paymentAssets?.find((a) => a.id === asset);
-  const walletPays = selected?.chain === "solana";
+  const selected = INTENTS_ASSETS.find((a) => a.id === asset);
+  // The connected wallet pays USDC and SOL on Solana; refunds of Solana assets go to it.
+  const walletPays = asset === SOLANA_USDC || asset === SOLANA_SOL;
+  const needsRefund = selected?.chain !== "solana";
   const amount = purchaseAmountUnits(amountText.replace(",", "."))?.usd ?? null;
 
   const poll = (depositAddress: string) => {
@@ -114,7 +118,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
     setQuote(null);
     setStatus(null);
     try {
-      setQuote(await requestPurchase(amount, asset, walletPays ? undefined : refundTo.trim()));
+      setQuote(await requestPurchase(amount, asset, needsRefund ? refundTo.trim() : undefined));
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -276,33 +280,25 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
                     className="h-full w-14 rounded-full bg-transparent px-1 outline-none"
                   />
                 </label>
-                <select
-                  value={asset}
-                  onChange={(event) => {
-                    setAsset(event.target.value);
-                    setQuote(null);
-                  }}
-                  aria-label="Pay with"
-                  className="h-7 rounded-lg border border-border bg-background px-2"
-                >
-                  {state.paymentAssets?.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                    </option>
-                  ))}
-                </select>
               </div>
-              {!walletPays ? (
+              <AssetPicker
+                value={asset}
+                onChange={(next) => {
+                  setAsset(next);
+                  setQuote(null);
+                }}
+              />
+              {needsRefund ? (
                 <input
                   value={refundTo}
                   onChange={(event) => setRefundTo(event.target.value)}
-                  placeholder={`Your ${selected?.chain ?? ""} address for refunds`}
+                  placeholder={`Your ${networkOf(asset)?.label ?? ""} address for refunds (${networkOf(asset)?.addressHint ?? ""})`}
                   className="h-7 w-full rounded-lg border border-border bg-background px-2"
                 />
               ) : null}
               <button
                 type="button"
-                disabled={busy !== null || amount === null || (!walletPays && !refundTo.trim())}
+                disabled={busy !== null || amount === null || (needsRefund && !refundTo.trim())}
                 onClick={() => void doQuote()}
                 className="inline-flex h-7 items-center rounded-full bg-primary px-3 font-medium text-primary-foreground disabled:opacity-40"
               >

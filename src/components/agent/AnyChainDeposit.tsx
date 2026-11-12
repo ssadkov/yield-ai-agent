@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-import { INTENTS_ASSETS, SOLANA_SOL_ASSET, SOLANA_USDC_ASSET, type IntentsAsset } from "@/lib/agent/intentsAssets";
+import { INTENTS_ASSETS, SOLANA_SOL_ASSET, SOLANA_USDC_ASSET, networkOf, type IntentsAsset } from "@/lib/agent/intentsAssets";
+import { AssetPicker } from "@/components/agent/AssetPicker";
 import { FINAL_STATUSES, fetchStatus, submitDepositTx, type OneClickStatusResponse } from "@/lib/agent/oneClick";
 import { buildUsdcDepositTx, panelConnections, withFallback } from "@/lib/agent/solanaSafe";
 
@@ -53,7 +54,11 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
 
   if (!publicKey) return null;
   const asset = INTENTS_ASSETS.find((a) => a.id === assetId)!;
-  const walletPays = asset.chain === "solana";
+  const network = networkOf(asset.id);
+  // The connected wallet pays USDC and SOL on Solana; anything else is sent by hand.
+  const walletPays = asset.id === SOLANA_USDC_ASSET || asset.id === SOLANA_SOL_ASSET;
+  // Refunds of Solana assets go to the connected wallet; other chains need an address there.
+  const needsRefund = asset.chain !== "solana";
   const final = status && FINAL_STATUSES.has(String(status.status)) ? String(status.status) : null;
 
   const reset = () => {
@@ -91,7 +96,7 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
           owner: publicKey.toBase58(),
           originAsset: asset.id,
           amount,
-          ...(walletPays ? {} : { refundTo: refundTo.trim() }),
+          ...(needsRefund ? { refundTo: refundTo.trim() } : {}),
         }),
         cache: "no-store",
       });
@@ -155,10 +160,18 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
   return (
     <div className="space-y-3 text-[13px]">
       <p className="leading-relaxed text-muted-foreground">
-        Pay with USDC or ETH on Base, USDT on Tron, NEAR, BTC or Solana tokens. NEAR Intents swaps and bridges it and delivers
-        USDC to your account on Solana.
+        Pay with a stablecoin or coin on any of these networks. NEAR Intents swaps and bridges it and delivers USDC to your
+        account on Solana.
       </p>
-      <div className="grid grid-cols-[1fr_auto] gap-2">
+      <AssetPicker
+        value={assetId}
+        disabled={busy !== null}
+        onChange={(next) => {
+          setAssetId(next);
+          reset();
+        }}
+      />
+      <div className="flex items-center gap-2 rounded-xl border border-border/80 bg-muted/40 px-3">
         <input
           value={amount}
           inputMode="decimal"
@@ -169,26 +182,11 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
           }}
           placeholder="Amount"
           aria-label={`Amount in ${asset.symbol}`}
-          className={field}
+          className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
         />
-        <select
-          value={assetId}
-          disabled={busy !== null}
-          onChange={(event) => {
-            setAssetId(event.target.value);
-            reset();
-          }}
-          aria-label="Pay with"
-          className="h-11 rounded-xl border border-border/80 bg-background px-2 text-[14px]"
-        >
-          {INTENTS_ASSETS.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label}
-            </option>
-          ))}
-        </select>
+        <span className="text-[13px] text-muted-foreground">{asset.label}</span>
       </div>
-      {!walletPays ? (
+      {needsRefund ? (
         <input
           value={refundTo}
           disabled={busy !== null}
@@ -196,7 +194,7 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
             setRefundTo(event.target.value);
             reset();
           }}
-          placeholder={`Your ${asset.chain} address, for a refund if it fails`}
+          placeholder={`Your ${network?.label ?? asset.chain} refund address (${network?.addressHint ?? "address"})`}
           aria-label="Refund address"
           className={field}
         />
@@ -204,7 +202,7 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
       {!quote ? (
         <button
           type="button"
-          disabled={busy !== null || !amount.trim() || (!walletPays && !refundTo.trim())}
+          disabled={busy !== null || !amount.trim() || (needsRefund && !refundTo.trim())}
           onClick={() => void getQuote()}
           className={primary}
         >
