@@ -51,7 +51,7 @@ export const ADVISOR_TOOLS = [
         properties: {
           strategyId: {
             type: "string",
-            description: "Yield row id, e.g. solana:kamino_usdc or solana:exponent_onyc_10jan27",
+            description: "Yield row id with agentExecutable true; today only solana:kamino_usdc",
           },
           amountUsdc: { type: "number", description: "USDC amount to allocate" },
           rationale: { type: "string", description: "Short reason for the owner" },
@@ -63,7 +63,8 @@ export const ADVISOR_TOOLS = [
   },
 ];
 
-const ALLOWED_STRATEGY_IDS = new Set(["solana:kamino_usdc", "solana:exponent_onyc_10jan27"]);
+// Exponent is listed for comparison only: this app has no Exponent deposit step yet.
+const ALLOWED_STRATEGY_IDS = new Set(["solana:kamino_usdc"]);
 
 export type ProposedPlan = {
   strategyId: string;

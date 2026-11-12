@@ -200,7 +200,7 @@ export function ActionCard({ card }: { card: ActionCardData }) {
 
       {isDeposit && phase === "idle" ? (
         <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground/80">
-          “Via NEAR Intents” sends Solana USDC to a one-time 1-Click address that pays your Safe (~1%, a few minutes). Test range: 1–5 USDC.
+          “Via NEAR Intents” sends Solana USDC to a one-time 1-Click address that pays your Safe (~1%, a few minutes). Demo range: 1–101 USDC.
         </p>
       ) : null}
 

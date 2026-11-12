@@ -207,12 +207,21 @@ export function checkPlanTransaction(
 }
 
 async function postPlan(path: string, body: unknown): Promise<SafePlan> {
-  const response = await fetch(`${API}/${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API}/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new SafeApiError("The Safe API did not answer in 45 s. Try again.", "TIMEOUT");
+    }
+    throw error;
+  }
   const json = (await response.json().catch(() => null)) as
     | (SafePlan & { error?: { message?: string } | string })
     | null;
@@ -238,7 +247,17 @@ export class SafeApiError extends Error {
 
 const owner = (address: PublicKey) => ({ type: "solana", address: address.toBase58() });
 
-export function requestCreationPlan(address: PublicKey, initialDepositUsdc?: string): Promise<SafePlan> {
+/** Demo ceiling for money coming in from the wallet while the program has one admin key (until Squads). */
+export const DEMO_MAX_DEPOSIT_USDC = 101;
+
+function assertDemoCap(amountUsdc: string | undefined) {
+  if (amountUsdc !== undefined && Number(amountUsdc) > DEMO_MAX_DEPOSIT_USDC) {
+    throw new Error(`Demo limit: up to ${DEMO_MAX_DEPOSIT_USDC} USDC per deposit.`);
+  }
+}
+
+export async function requestCreationPlan(address: PublicKey, initialDepositUsdc?: string): Promise<SafePlan> {
+  assertDemoCap(initialDepositUsdc);
   return postPlan("safes/creation-plan", {
     owner: owner(address),
     cluster: "mainnet",
@@ -247,16 +266,18 @@ export function requestCreationPlan(address: PublicKey, initialDepositUsdc?: str
 }
 
 /** USDC from the owner's wallet straight into the Safe. */
-export function requestDepositPlan(address: PublicKey, amountUsdc: string): Promise<SafePlan> {
+export async function requestDepositPlan(address: PublicKey, amountUsdc: string): Promise<SafePlan> {
+  assertDemoCap(amountUsdc);
   return postPlan("deposits/plan", { owner: owner(address), cluster: "mainnet", amount: amountUsdc });
 }
 
 /** Into the Kamino USDC vault from the Safe's idle USDC, or straight from the wallet in one transaction. */
-export function requestKaminoDepositPlan(
+export async function requestKaminoDepositPlan(
   address: PublicKey,
   amountUsdc: string,
   source: "safe" | "wallet" = "safe"
 ): Promise<SafePlan> {
+  if (source === "wallet") assertDemoCap(amountUsdc);
   return postPlan("protocols/kamino/deposits/plan", {
     owner: owner(address),
     cluster: "mainnet",
@@ -307,13 +328,17 @@ export async function signAndSendPlan(options: {
   treasury?: PublicKey;
   connection: Connection;
   sendTransaction: (tx: VersionedTransaction, connection: Connection) => Promise<string>;
+  /** "wallet" right before the wallet is asked to sign, "confirming" once it sent the transaction. */
+  onStage?: (stage: "wallet" | "confirming") => void;
 }): Promise<string> {
-  const { plan, owner: wallet, kind, amountRaw, treasury, connection, sendTransaction } = options;
+  const { plan, owner: wallet, kind, amountRaw, treasury, connection, sendTransaction, onStage } = options;
   if (plan.status !== "ready" || plan.steps.length !== 1) {
     throw new Error(plan.status === "already_exists" ? "Your Safe already exists." : "The Safe API returned no transaction.");
   }
   const tx = checkPlanTransaction(plan.steps[0].transaction, { owner: wallet, kind, amountRaw, treasury });
+  onStage?.("wallet");
   const signature = await sendTransaction(tx, connection);
+  onStage?.("confirming");
   if (plan.blockhash && plan.lastValidBlockHeight) {
     const result = await connection.confirmTransaction(
       { signature, blockhash: plan.blockhash, lastValidBlockHeight: plan.lastValidBlockHeight },

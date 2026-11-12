@@ -82,7 +82,6 @@ export function WalletSidePanel({
 
       {!connected && !showSkeleton ? (
         <section className="panel-glass overflow-hidden rounded-2xl px-4 py-5">
-          <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">&gt;&gt; wallet</p>
           <h3 className="mt-1 text-base font-semibold tracking-tight">Connect to continue</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
             {SHOW_APTOS

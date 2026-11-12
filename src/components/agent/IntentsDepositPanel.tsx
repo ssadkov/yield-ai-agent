@@ -34,7 +34,7 @@ import { SHOW_APTOS } from "@/lib/agent/features";
 
 /** Test-sized deposits only, while the flow is unproven on mainnet. */
 const MIN_RAW = BigInt(1_000_000);
-const MAX_RAW = BigInt(5_000_000);
+const MAX_RAW = BigInt(101_000_000);
 const SLIPPAGE_BPS = 100;
 const POLL_MS = 5_000;
 const QUOTE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -187,7 +187,7 @@ export function IntentsDepositPanel({
   const blocker = (() => {
     if (!owner) return "Connect the Solana wallet in this browser first.";
     if (amountRaw === null) return "Enter a USDC amount, up to 6 decimals.";
-    if (amountRaw < MIN_RAW || amountRaw > MAX_RAW) return "Test amounts only: 1 to 5 USDC.";
+    if (amountRaw < MIN_RAW || amountRaw > MAX_RAW) return "Demo limit: 1 to 101 USDC.";
     if (!safe) return safeError ?? "Reading the wallet…";
     if (safe.walletUsdcRaw < amountRaw) return `This wallet holds ${formatUsdc(safe.walletUsdcRaw)} USDC on Solana.`;
     if (destination === "solana-safe") {

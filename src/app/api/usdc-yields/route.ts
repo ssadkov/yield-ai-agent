@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { formatUsdcYieldsForPrompt, loadUsdcYields, type UsdcYieldsResponse } from "@/lib/agent/usdcYields";
+import { formatUsdcYieldsForPrompt, limitToAppRoutes, loadUsdcYields, type UsdcYieldsResponse } from "@/lib/agent/usdcYields";
 
 /**
  * GET /agent/api/usdc-yields (basePath /agent). On yieldai.app the main app proxies /agent/*
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     ).finally(() => {
       inflight = null;
     });
-    cache = { at: Date.now(), value: await inflight };
+    cache = { at: Date.now(), value: limitToAppRoutes(await inflight) };
   }
   if (new URL(request.url).searchParams.get("format") === "text") {
     return new NextResponse(formatUsdcYieldsForPrompt(cache.value), {

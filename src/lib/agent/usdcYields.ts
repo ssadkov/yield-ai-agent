@@ -329,6 +329,23 @@ function withMaturityAt(row: UsdcYield, now: number): UsdcYield {
  * Compact plain text of the response for a tool result: one line per row plus source status.
  * Cheaper and less ambiguous for the model than the raw JSON.
  */
+/**
+ * Rows this app can execute today. The Solana Safe can hold Exponent PT, but this app has no
+ * Exponent deposit step yet, so the advisor gets it for comparison only.
+ */
+export const APP_EXECUTABLE_IDS: ReadonlySet<string> = new Set(["solana:kamino_usdc"]);
+
+export function limitToAppRoutes(res: UsdcYieldsResponse, executable = APP_EXECUTABLE_IDS): UsdcYieldsResponse {
+  return {
+    ...res,
+    rows: res.rows.map((row) =>
+      executable.has(row.id) || !row.agentExecutable
+        ? row
+        : { ...row, agentExecutable: false, caveats: [...row.caveats, "Shown for comparison: this app cannot deposit here yet."] }
+    ),
+  };
+}
+
 export function formatUsdcYieldsForPrompt(res: UsdcYieldsResponse): string {
   const lines = [`USDC yields for Yield AI Safes, as of ${res.updatedAt}:`];
   for (const r of res.rows) {

@@ -11,6 +11,7 @@ import {
   requestKaminoReturnPlan,
   requestWithdrawPlan,
   signAndSendPlan,
+  DEMO_MAX_DEPOSIT_USDC,
   type PlanKind,
   type SafePlan,
 } from "@/lib/agent/safePlans";
@@ -40,23 +41,41 @@ function errorText(error: unknown): string {
 type Done = { label: string; signature: string };
 type Source = "wallet" | "intents";
 
-/** Live Kamino USDC APY from /agent/api/usdc-yields; null while unknown. */
+/** Live Kamino USDC APY from /agent/api/usdc-yields; null while unknown. Retries while missing. */
 function useKaminoApy(): number | null {
   const [apy, setApy] = useState<number | null>(null);
   useEffect(() => {
     let active = true;
-    fetch("/agent/api/usdc-yields", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json: { rows?: { id: string; ratePct: number | null }[] } | null) => {
-        const rate = json?.rows?.find((row) => row.id === KAMINO_ROW_ID)?.ratePct;
-        if (active && typeof rate === "number" && Number.isFinite(rate)) setApy(rate);
-      })
-      .catch(() => undefined);
+    let timer: number | null = null;
+    const load = (attempt: number) => {
+      fetch("/agent/api/usdc-yields", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json: { rows?: { id: string; ratePct: number | null }[] } | null) => {
+          const rate = json?.rows?.find((row) => row.id === KAMINO_ROW_ID)?.ratePct;
+          if (typeof rate === "number" && Number.isFinite(rate)) {
+            if (active) setApy(rate);
+            return;
+          }
+          throw new Error("no Kamino rate");
+        })
+        .catch(() => {
+          if (active && attempt < 4) timer = window.setTimeout(() => load(attempt + 1), 10_000 * (attempt + 1));
+        });
+    };
+    load(0);
     return () => {
       active = false;
+      if (timer !== null) window.clearTimeout(timer);
     };
   }, []);
   return apy;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(`${what} did not answer in ${ms / 1000} s`)), ms)),
+  ]);
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -111,6 +130,8 @@ export function EarnPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done[]>([]);
+  /** Where the running action is, so a stall shows whether it waits for the API, the wallet or the chain. */
+  const [stage, setStage] = useState<"preparing" | "wallet" | "confirming" | null>(null);
 
   const refresh = useCallback(
     async (fresh = false) => {
@@ -147,17 +168,30 @@ export function EarnPanel() {
   const connection = async (): Promise<Connection> =>
     (
       await withFallback(panelConnections(window.location.host, window.location.origin), async (c) => {
-        await c.getLatestBlockhash("confirmed");
+        await withTimeout(c.getLatestBlockhash("confirmed"), 15_000, "Solana RPC");
         return c;
       })
     ).value;
 
-  const sign = async (plan: SafePlan, kind: PlanKind, raw?: bigint, treasury?: PublicKey) =>
-    signAndSendPlan({ plan, owner, kind, amountRaw: raw, treasury, connection: await connection(), sendTransaction });
+  const sign = async (plan: SafePlan, kind: PlanKind, raw?: bigint, treasury?: PublicKey) => {
+    const signature = await signAndSendPlan({
+      plan,
+      owner,
+      kind,
+      amountRaw: raw,
+      treasury,
+      connection: await connection(),
+      sendTransaction,
+      onStage: setStage,
+    });
+    setStage("preparing");
+    return signature;
+  };
 
   /** Run one action; on success record its transactions and reload. */
   const run = async (id: string, action: () => Promise<Done[]>, after?: () => void) => {
     setBusy(id);
+    setStage("preparing");
     setError(null);
     try {
       const results = await action();
@@ -168,6 +202,7 @@ export function EarnPanel() {
       setError(errorText(err));
     } finally {
       setBusy(null);
+      setStage(null);
     }
   };
 
@@ -271,7 +306,9 @@ export function EarnPanel() {
   const secondary = `${btn} border border-border text-foreground hover:bg-muted`;
   const small =
     "inline-flex h-8 items-center justify-center rounded-full border border-border px-3 text-[13px] font-medium hover:bg-muted disabled:opacity-40";
-  const label = (id: string, text: string) => (busy === id ? "Sign in wallet…" : text);
+  const stageText =
+    stage === "wallet" ? "Confirm in your wallet…" : stage === "confirming" ? "Confirming on Solana…" : "Preparing…";
+  const label = (id: string, text: string) => (busy === id ? stageText : text);
   const apyText = apy !== null ? `~${apy.toFixed(1)}% APY` : "variable APY";
   // What the fee on Kamino's yield buys, live: dollars a second → GLM output tokens.
   const feeRate = (s?.performanceFeeBps ?? 0) / 10_000;
@@ -459,7 +496,7 @@ export function EarnPanel() {
                 </button>
                 <span className="text-[13px] text-muted-foreground">USDC</span>
               </div>
-              <p className="mt-1 text-[12px] text-muted-foreground">Wallet: {usd(s.walletUsdc, 6)} USDC · minimum 1 USDC</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">Wallet: {usd(s.walletUsdc, 6)} USDC · 1 to {DEMO_MAX_DEPOSIT_USDC} USDC (demo limit)</p>
               <button
                 type="button"
                 disabled={disabled || amountRaw === null}
@@ -511,7 +548,7 @@ export function EarnPanel() {
                   ["100", "All"],
                 ].map(([percent, text]) => (
                   <button key={percent} type="button" disabled={disabled} onClick={() => void exitKamino(percent)} className={small}>
-                    {busy === `exit-${percent}` ? "Sign in wallet…" : text}
+                    {busy === `exit-${percent}` ? stageText : text}
                   </button>
                 ))}
               </div>

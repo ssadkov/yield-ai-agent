@@ -70,7 +70,7 @@ export const CHAT_MODE_PLACEHOLDER: Record<ChatMode, string> = {
 };
 
 export const ADVISOR_SUGGESTIONS = [
-  "Where should I put 200 USDC on Solana?",
+  "Where should I put 100 USDC on Solana?",
   "What’s the best USDC yield right now?",
   "Explain Kamino vs Exponent for USDC",
 ] as const;
