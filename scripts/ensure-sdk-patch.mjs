@@ -6,11 +6,17 @@
  * the build cache and the bundle still had the unpatched check, so any visitor whose clock was a
  * second behind NVIDIA's got "NVIDIA JWT verification failed: not_yet_valid" and could not chat.
  *
- * This script does not trust the installer. It reads the files the bundler will read, applies the
- * same two edits if they are missing, and fails the build if it cannot. When it had to edit, it
- * drops the bundler cache so a cached unpatched module is not reused.
+ * The build log of 2026-11-13 22:19 UTC then showed the patch present in node_modules while the
+ * bundle was still unpatched: the bundler's persistent cache keys a package by its version, the
+ * version did not change, so it kept serving the module it had compiled before the patch.
+ *
+ * So this script trusts neither the installer nor the cache. It reads the files the bundler will
+ * read, applies the same two edits if they are missing, and fails the build if it cannot. It then
+ * compares a hash of those files with a stamp kept inside the bundler cache; if the stamp is
+ * missing or different, the cache was built from other SDK code and is dropped.
  */
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,6 +41,7 @@ const edits = [
 ];
 
 let changed = false;
+const hash = createHash("sha256");
 for (const file of files) {
   const path = join(dist, file);
   if (!existsSync(path)) {
@@ -64,11 +71,22 @@ for (const file of files) {
     changed = true;
     console.log(`ensure-sdk-patch: patched ${file} (the installer had not).`);
   }
+  hash.update(source);
 }
+console.log(changed ? "ensure-sdk-patch: SDK patched by this script." : "ensure-sdk-patch: SDK clock-tolerance patch is in place.");
 
-if (changed) {
-  rmSync(join(root, ".next", "cache"), { recursive: true, force: true });
-  console.log("ensure-sdk-patch: dropped .next/cache so no unpatched module is reused.");
+const cacheDir = join(root, ".next", "cache");
+const stampPath = join(cacheDir, "sdk-patch.stamp");
+const stamp = hash.digest("hex");
+const previous = existsSync(stampPath) ? readFileSync(stampPath, "utf8").trim() : null;
+if (previous !== stamp) {
+  if (existsSync(cacheDir)) {
+    rmSync(cacheDir, { recursive: true, force: true });
+    console.log("ensure-sdk-patch: dropped .next/cache (it was built from other SDK code or has no stamp).");
+  }
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(stampPath, `${stamp}
+`);
 } else {
-  console.log("ensure-sdk-patch: SDK clock-tolerance patch is in place.");
+  console.log("ensure-sdk-patch: bundler cache matches this SDK code.");
 }
