@@ -237,6 +237,15 @@ export function AdvisorChatShell() {
   const mode: ChatMode = chosenMode === "free" && !openChatUnlocked ? "advisor" : chosenMode;
   /** Open chat with the image model: the message is a picture prompt. */
   const pictureMode = mode === "free" && preferredModel === IMAGE_MODEL;
+
+  // The page's ambient colour follows the mode, so a switch is visible at a glance (globals.css).
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.chatMode = pictureMode ? "picture" : mode;
+    return () => {
+      delete root.dataset.chatMode;
+    };
+  }, [mode, pictureMode]);
   const onCreditsState = useCallback(
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []

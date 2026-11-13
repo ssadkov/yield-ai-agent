@@ -82,6 +82,39 @@
   --hairline: linear-gradient(90deg, transparent, rgba(77, 141, 255, 0.7), transparent);
 }
 
+/* Ambient colour by chat mode (set on <html> by AdvisorChatShell). Yield Advisor keeps the default blue. */
+:root[data-chat-mode="free"] {
+  --glow: rgba(124, 58, 237, 0.16);
+  --grid-line: rgba(124, 58, 237, 0.07);
+  --atmosphere-1: rgba(124, 58, 237, 0.13);
+  --atmosphere-2: rgba(192, 132, 252, 0.11);
+  --hairline: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.55), transparent);
+}
+
+:root.dark[data-chat-mode="free"] {
+  --glow: rgba(167, 139, 250, 0.22);
+  --grid-line: rgba(167, 139, 250, 0.08);
+  --atmosphere-1: rgba(139, 92, 246, 0.18);
+  --atmosphere-2: rgba(192, 132, 252, 0.09);
+  --hairline: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.7), transparent);
+}
+
+:root[data-chat-mode="picture"] {
+  --glow: rgba(219, 39, 119, 0.15);
+  --grid-line: rgba(219, 39, 119, 0.06);
+  --atmosphere-1: rgba(219, 39, 119, 0.12);
+  --atmosphere-2: rgba(251, 146, 60, 0.12);
+  --hairline: linear-gradient(90deg, transparent, rgba(219, 39, 119, 0.5), transparent);
+}
+
+:root.dark[data-chat-mode="picture"] {
+  --glow: rgba(244, 114, 182, 0.2);
+  --grid-line: rgba(244, 114, 182, 0.07);
+  --atmosphere-1: rgba(236, 72, 153, 0.16);
+  --atmosphere-2: rgba(251, 146, 60, 0.1);
+  --hairline: linear-gradient(90deg, transparent, rgba(244, 114, 182, 0.65), transparent);
+}
+
 html {
   color-scheme: light;
 }
