@@ -171,7 +171,7 @@ export async function unpricedUsage(limit = 50): Promise<string[]> {
   const db = await ready();
   const result = rows(
     await db`select inference_id from advisor_usage
-             where cost_usd is null and created_at < now() - interval '20 seconds'
+             where cost_usd is null and inference_id not like 'img:%' and created_at < now() - interval '20 seconds'
              order by created_at limit ${limit}`
   );
   return result.map((r) => String(r.inference_id));

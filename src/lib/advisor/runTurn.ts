@@ -1,7 +1,8 @@
-import { ADVISOR_FALLBACK_MODEL, DEFAULT_ADVISOR_MODEL, type AdvisorModel } from "@/lib/advisor/models";
+import { ADVISOR_FALLBACK_MODEL, DEFAULT_ADVISOR_MODEL, IMAGE_MODEL, type AttestableModel } from "@/lib/advisor/models";
 import { seedHistoryForMode, type ChatMode } from "@/lib/advisor/modes";
 import {
   createSessionKeys,
+  generateImage,
   pickAttestedModel,
   streamChatCompletion,
   type AnswerProof,
@@ -40,7 +41,7 @@ export type AdvisorSession = {
 
 export async function startAdvisorSession(
   seedHistory?: ChatMessage[],
-  model: AdvisorModel = DEFAULT_ADVISOR_MODEL,
+  model: AttestableModel = DEFAULT_ADVISOR_MODEL,
   mode: ChatMode = "advisor"
 ): Promise<AdvisorSession> {
   // The advisor may fall back to a second attested model; Open chat uses exactly what was picked.
@@ -75,8 +76,23 @@ export async function runAdvisorTurn(options: {
   inferenceIds: string[];
   /** Exact bytes of every completion in this turn, for the response-signature check. */
   evidence: CompletionEvidence[];
+  /** Pictures the model made (image model only), as data URLs decrypted in this browser. */
+  images?: string[];
 }> {
   const { session, userText, images, onAssistantDelta, onStatus } = options;
+  if (session.attested.model === IMAGE_MODEL) {
+    onStatus?.("Drawing inside the TEE…");
+    const picture = await generateImage({ attested: session.attested, keys: session.keys, prompt: userText });
+    return {
+      assistantText: "",
+      plan: null,
+      actionCard: null,
+      model: session.attested.model,
+      inferenceIds: [],
+      evidence: [],
+      images: [picture.dataUrl],
+    };
+  }
   session.history.push(
     images && images.length > 0
       ? {

@@ -4,14 +4,15 @@ import {
   checkAttestationQuery,
   checkChatBody,
   checkChatHeaders,
+  checkImageBody,
   checkSignatureQuery,
   resolveProxyRoute,
 } from "@/lib/advisor/proxyPolicy";
-import { creditsEnabled, recordUsage, setUsageTokens } from "@/lib/credits/db";
+import { creditsEnabled, recordUsage, setUsageCost, setUsageTokens } from "@/lib/credits/db";
 import { estimateRequestUsd } from "@/lib/credits/ledger";
 import { openChatUnlocked, visitorTrial, walletBalance } from "@/lib/credits/service";
 import { TRIAL_CAP_REACHED, TRIAL_USED_UP, clientIp } from "@/lib/credits/trial";
-import { UNCENSORED_MODEL } from "@/lib/advisor/models";
+import { IMAGE_MODEL, IMAGE_PRICE_USD, UNCENSORED_MODEL } from "@/lib/advisor/models";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
 /**
@@ -138,6 +139,30 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
       // Reserve at the model's output price ($/1M, NEAR AI 2026-11-12); the billed cost replaces it.
       estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200, uncensored ? 1.2 : 0.5);
     }
+  } else if (route.kind === "image") {
+    // One encrypted picture for a signed-in wallet that unlocked Open chat; never on the free trial.
+    const headerCheck = checkChatHeaders(request.headers);
+    if (!headerCheck.ok) return refuse(headerCheck.status, headerCheck.error);
+    body = await request.text();
+    const bodyCheck = checkImageBody(body);
+    if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
+    if (creditsEnabled()) {
+      billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
+      if (!billedWallet) return refuse(401, "Connect a Solana wallet and sign once to create pictures.");
+      try {
+        const balance = await walletBalance(billedWallet);
+        if (balance.availableUsd < IMAGE_PRICE_USD) {
+          return refuse(402, `A picture costs $${IMAGE_PRICE_USD}. Top up AI credits to continue.`);
+        }
+      } catch {
+        return refuse(503, "Credit ledger unavailable");
+      }
+      if (!(await openChatUnlocked(billedWallet).catch(() => false))) {
+        return refuse(403, "Pictures unlock after a Safe deposit or a credits top-up.");
+      }
+      estimatedUsd = IMAGE_PRICE_USD;
+      billedModel = IMAGE_MODEL;
+    }
   } else {
     const queryCheck =
       route.kind === "attestation"
@@ -174,6 +199,17 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   if (inferenceId) out.set("inference-id", inferenceId);
   out.set("cache-control", "no-store");
   let responseBody = upstream.body;
+  if (route.kind === "image") {
+    // NEAR AI returns no billing id for pictures (only x-request-id, which /v1/billing/costs does
+    // not price), so the list price is recorded as the final cost.
+    const requestId = upstream.headers.get("x-request-id");
+    if (billedWallet && requestId && upstream.ok) {
+      const id = `img:${requestId}`;
+      await recordUsage(billedWallet, id, IMAGE_PRICE_USD, IMAGE_MODEL).catch(() => undefined);
+      await setUsageCost(id, IMAGE_PRICE_USD).catch(() => undefined);
+    }
+    return new NextResponse(responseBody, { status: upstream.status, headers: out });
+  }
   if (billedWallet && inferenceId && upstream.ok) {
     // Estimate now; NEAR AI's billed cost replaces it on the next balance read.
     await recordUsage(billedWallet, inferenceId, estimatedUsd, billedModel).catch(() => undefined);

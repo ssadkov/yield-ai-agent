@@ -54,7 +54,7 @@ export const CHAT_MODE_HINT: Record<ChatMode, string> = {
 /** Which model answers in each mode, for the picker. All run in a verified TEE on NEAR AI Cloud. */
 export const CHAT_MODE_MODEL: Record<ChatMode, string> = {
   advisor: "GLM 5.3 Flash",
-  free: "GLM 5.3 Flash or DeepSeek V4.1 (uncensored)",
+  free: "GLM 5.3 Flash, DeepSeek V4.1 (uncensored) or FLUX.2 (pictures)",
 };
 
 /** Why Open chat is greyed out until the wallet has skin in the game. */

@@ -20,6 +20,7 @@ import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
 import { setAdvisorWallet } from "@/lib/advisor/tools";
 import {
   DEFAULT_ADVISOR_MODEL,
+  IMAGE_MODEL,
   advisorModelShortLabel,
   loadPreferredOpenChatModel,
   savePreferredOpenChatModel,
@@ -234,6 +235,8 @@ export function AdvisorChatShell() {
     credits.state?.enabled === false ||
     Boolean(credits.wallet && credits.state?.signedIn && credits.state.wallet === credits.wallet && credits.state.openChat);
   const mode: ChatMode = chosenMode === "free" && !openChatUnlocked ? "advisor" : chosenMode;
+  /** Open chat with the image model: the message is a picture prompt. */
+  const pictureMode = mode === "free" && preferredModel === IMAGE_MODEL;
   const onCreditsState = useCallback(
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []
@@ -325,6 +328,7 @@ export function AdvisorChatShell() {
   };
 
   const addImages = async (files: File[]) => {
+    if (pictureMode) return setError("Picture mode draws from text; switch the model to attach pictures.");
     const room = MAX_IMAGES_PER_MESSAGE - attachments.length;
     const picked = files.filter((f) => f.type.startsWith("image/"));
     if (picked.length === 0) return;
@@ -381,6 +385,8 @@ export function AdvisorChatShell() {
       });
       setModel(result.model);
       rememberInferenceIds(result.inferenceIds);
+      // Pictures have no inference id; still refresh the balance they were charged to.
+      if (result.images?.length) window.dispatchEvent(new Event("agent-inference-ids"));
       patchActive((list) =>
         list.map((message) =>
           message.id === nextStreamId
@@ -389,10 +395,13 @@ export function AdvisorChatShell() {
                 content: result.assistantText,
                 plan: result.plan ?? undefined,
                 actionCard: result.actionCard ?? undefined,
+                ...(result.images?.length ? { images: result.images } : {}),
               }
             : message
         )
       );
+      // Pictures carry no signed completion to check; their privacy rests on the attestation and E2EE.
+      if (result.evidence.length === 0) return;
       setChecking((prev) => new Set(prev).add(nextStreamId));
       void verifyAnswer(session.attested, result.evidence).then((proof) => {
         setChecking((prev) => {
@@ -485,7 +494,7 @@ export function AdvisorChatShell() {
         ) : null}
 
         {messages.map((message) => {
-          if (!message.content && !message.actionCard && message.role === "assistant") return null;
+          if (!message.content && !message.actionCard && !message.images?.length && message.role === "assistant") return null;
           const isUser = message.role === "user";
           return (
             <div
@@ -514,6 +523,19 @@ export function AdvisorChatShell() {
                   </>
                 ) : (
                   <div className="space-y-3">
+                    {message.images?.length ? (
+                      <div className="space-y-1.5">
+                        {message.images.map((url, i) => (
+                          <a key={i} href={url} download={`yield-ai-picture-${i + 1}.jpg`} title="Download">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- decrypted in this browser */}
+                            <img src={url} alt="Generated picture" className="w-full max-w-md rounded-2xl" />
+                          </a>
+                        ))}
+                        <p className="text-[12px] text-emerald-700 dark:text-emerald-300">
+                          Drawn by FLUX.2 inside a verified TEE · encrypted to this browser · not saved in history
+                        </p>
+                      </div>
+                    ) : null}
                     {message.content ? <ChatMarkdown content={message.content} /> : null}
                     {message.plan ? (
                       <div className="rounded-2xl border border-border/60 bg-background/50 px-3 py-2.5 text-[13px]">
@@ -606,7 +628,7 @@ export function AdvisorChatShell() {
                 void send(input);
               }
             }}
-            placeholder={CHAT_MODE_PLACEHOLDER[mode]}
+            placeholder={pictureMode ? "Describe a picture…" : CHAT_MODE_PLACEHOLDER[mode]}
             rows={2}
             disabled={busy}
             className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px]"
@@ -627,7 +649,7 @@ export function AdvisorChatShell() {
               />
               <button
                 type="button"
-                disabled={busy || attachments.length >= MAX_IMAGES_PER_MESSAGE}
+                disabled={busy || pictureMode || attachments.length >= MAX_IMAGES_PER_MESSAGE}
                 onClick={() => fileRef.current?.click()}
                 aria-label="Attach a picture"
                 title="Attach a picture (encrypted like your text)"
