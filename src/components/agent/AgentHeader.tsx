@@ -99,18 +99,11 @@ export function AgentHeader({
             <h1 className="truncate text-[15px] font-semibold tracking-tight">
               Yield <span className="text-primary">AI</span>
             </h1>
-            <p className="hidden font-mono text-[10px] tracking-[0.14em] text-primary/80 uppercase sm:block">
-              &gt;&gt; private desk
-            </p>
+            <p className="hidden text-[11px] text-muted-foreground sm:block">Your yield pays for your private AI</p>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <span className="hidden items-center gap-2 rounded-full border border-border/70 bg-surface px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted-foreground md:inline-flex">
-            <span className="status-dot h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
-            enclave://ready
-          </span>
-
           <ThemeToggle />
 
           {connected ? (
@@ -132,7 +125,7 @@ export function AgentHeader({
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="panel-glass absolute right-0 mt-2 w-72 overflow-hidden rounded-2xl"
+                  className="panel-popover absolute right-0 mt-2 w-72 overflow-hidden rounded-2xl"
                 >
                   <div className="space-y-3 divide-y divide-border px-3 py-1">
                     {solanaAddress ? (

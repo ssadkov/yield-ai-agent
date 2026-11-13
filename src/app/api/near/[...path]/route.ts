@@ -9,7 +9,9 @@ import {
 } from "@/lib/advisor/proxyPolicy";
 import { creditsEnabled, recordUsage, setUsageTokens } from "@/lib/credits/db";
 import { estimateRequestUsd } from "@/lib/credits/ledger";
-import { walletBalance } from "@/lib/credits/service";
+import { openChatUnlocked, visitorTrial, walletBalance } from "@/lib/credits/service";
+import { TRIAL_CAP_REACHED, TRIAL_USED_UP, clientIp } from "@/lib/credits/trial";
+import { UNCENSORED_MODEL } from "@/lib/advisor/models";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
 /**
@@ -42,13 +44,6 @@ const RATE_LIMIT = 40;
 const RATE_WINDOW_MS = 60_000;
 const HITS_MAX_ENTRIES = 10_000;
 
-function clientIp(request: Request): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown"
-  );
-}
 
 function rateLimited(ip: string): boolean {
   const now = Date.now();
@@ -92,7 +87,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const key = process.env.NEAR_AI_API_KEY?.trim();
   if (!key) return refuse(503, "NEAR_AI_API_KEY is not configured");
 
-  if (rateLimited(clientIp(request))) return refuse(429, "Rate limit exceeded");
+  if (rateLimited((clientIp(request) ?? "unknown"))) return refuse(429, "Rate limit exceeded");
 
   const { path: parts } = await context.params;
   const route = resolveProxyRoute(parts ?? [], request.method);
@@ -111,17 +106,37 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     const bodyCheck = checkChatBody(body, request.headers.get("x-encrypt-all-fields") === "true");
     if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
     if (creditsEnabled()) {
-      billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
-      if (!billedWallet) return refuse(401, "Sign in with your wallet to use the advisor");
-      try {
-        const balance = await walletBalance(billedWallet);
-        if (balance.availableUsd <= 0) return refuse(402, "Out of AI credits. Top up to continue.");
-      } catch {
-        return refuse(503, "Credit ledger unavailable");
-      }
       const parsed = JSON.parse(body) as { max_tokens?: number; model?: string };
-      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200);
       billedModel = typeof parsed.model === "string" ? parsed.model : null;
+      const uncensored = billedModel === UNCENSORED_MODEL;
+      billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
+      if (billedWallet) {
+        try {
+          const balance = await walletBalance(billedWallet);
+          if (balance.availableUsd <= 0) return refuse(402, "Out of AI credits. Top up to continue.");
+        } catch {
+          return refuse(503, "Credit ledger unavailable");
+        }
+        if (uncensored && !(await openChatUnlocked(billedWallet).catch(() => false))) {
+          return refuse(403, "The uncensored model unlocks after a Safe deposit or a credits top-up.");
+        }
+      } else {
+        // No wallet: a few free advisor requests a day (src/lib/credits/trial.ts), never uncensored.
+        if (uncensored) return refuse(401, "Connect a Solana wallet to use Open chat.");
+        let trial: Awaited<ReturnType<typeof visitorTrial>>;
+        try {
+          trial = await visitorTrial(request);
+        } catch {
+          return refuse(503, "Credit ledger unavailable");
+        }
+        if (!trial) return refuse(401, "Connect a Solana wallet to chat.");
+        if (!trial.state.allowed) {
+          return refuse(429, trial.state.reason === "daily_cap" ? TRIAL_CAP_REACHED : TRIAL_USED_UP);
+        }
+        billedWallet = trial.guest;
+      }
+      // Reserve at the model's output price ($/1M, NEAR AI 2026-11-12); the billed cost replaces it.
+      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200, uncensored ? 1.2 : 0.5);
     }
   } else {
     const queryCheck =

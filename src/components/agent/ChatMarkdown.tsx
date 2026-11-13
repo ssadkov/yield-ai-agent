@@ -10,7 +10,7 @@ type ChatMarkdownProps = {
 
 export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
   return (
-    <div className={["gpt-chat-md text-[13.5px] leading-[1.65] text-foreground/90", className].filter(Boolean).join(" ")}>
+    <div className={["gpt-chat-md text-[15px] leading-[1.65] text-foreground/90", className].filter(Boolean).join(" ")}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -27,17 +27,17 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
             </li>
           ),
           h1: ({ children }) => (
-            <h3 className="mb-2 mt-1 text-[15px] font-semibold tracking-tight text-foreground first:mt-0">
+            <h3 className="mb-2 mt-1 text-[17px] font-semibold tracking-tight text-foreground first:mt-0">
               {children}
             </h3>
           ),
           h2: ({ children }) => (
-            <h3 className="mb-2 mt-1 text-[14.5px] font-semibold tracking-tight text-foreground first:mt-0">
+            <h3 className="mb-2 mt-1 text-[16px] font-semibold tracking-tight text-foreground first:mt-0">
               {children}
             </h3>
           ),
           h3: ({ children }) => (
-            <h4 className="mb-1.5 mt-1 text-[13.5px] font-semibold tracking-tight text-foreground first:mt-0">
+            <h4 className="mb-1.5 mt-1 text-[15px] font-semibold tracking-tight text-foreground first:mt-0">
               {children}
             </h4>
           ),
@@ -55,13 +55,13 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
             const isBlock = Boolean(codeClassName?.includes("language-"));
             if (isBlock) {
               return (
-                <code className="block whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-foreground/90">
+                <code className="block whitespace-pre-wrap font-mono text-[13.5px] leading-relaxed text-foreground/90">
                   {children}
                 </code>
               );
             }
             return (
-              <code className="rounded-md bg-foreground/10 px-1.5 py-0.5 font-mono text-[12px] text-foreground">
+              <code className="rounded-md bg-foreground/10 px-1.5 py-0.5 font-mono text-[13.5px] text-foreground">
                 {children}
               </code>
             );
@@ -79,7 +79,7 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
           hr: () => <hr className="my-4 border-border/60" />,
           table: ({ children }) => (
             <div className="mb-3 overflow-x-auto last:mb-0">
-              <table className="w-full min-w-[16rem] border-collapse text-left text-[12.5px]">{children}</table>
+              <table className="w-full min-w-[16rem] border-collapse text-left text-[14px]">{children}</table>
             </div>
           ),
           thead: ({ children }) => <thead className="border-b border-border/70 text-foreground">{children}</thead>,

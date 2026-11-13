@@ -44,7 +44,7 @@ function usd(value: number): string {
  * One line under the chat: what the staked AI pool funds per month (read from NEAR mainnet) and
  * what this chat has cost so far (NEAR AI billing, by inference id).
  */
-export function AiPoolMeter() {
+export function AiPoolMeter({ className }: { className?: string } = {}) {
   const [pool, setPool] = useState<AiPoolSnapshot | null>(null);
   const [spent, setSpent] = useState<{ usd: number; requests: number } | null>(null);
 
@@ -92,7 +92,7 @@ export function AiPoolMeter() {
   if (!pool && !spent) return null;
   return (
     <p
-      className="px-3.5 pb-1 text-[10.5px] leading-relaxed text-muted-foreground sm:px-5"
+      className={className ?? "px-3.5 pb-1 text-[10.5px] leading-relaxed text-muted-foreground sm:px-5"}
       title={
         pool
           ? `NEAR staked by ${pool.account} on ${pool.validator} via NEAR AI Staking for Inference. Rate measured on-chain over ${pool.measuredOverSeconds}s at ${pool.measuredAt}; ~$0.001 per advisor request.`
@@ -100,7 +100,7 @@ export function AiPoolMeter() {
       }
     >
       {pool
-        ? `AI pool: ${pool.stakedNear.toLocaleString("en-US", { maximumFractionDigits: 2 })} NEAR staked → ${usd(pool.usdPerMonth)}/month ≈ ${pool.requestsPerMonth.toLocaleString("en-US")} private requests`
+        ? `Free AI comes from our NEAR staking pool: ${pool.stakedNear.toLocaleString("en-US", { maximumFractionDigits: 2 })} NEAR staked → ${usd(pool.usdPerMonth)}/month ≈ ${pool.requestsPerMonth.toLocaleString("en-US")} private requests`
         : null}
       {pool && spent ? " · " : null}
       {spent ? `this browser: ${spent.requests} requests, ${usd(spent.usd)}` : null}

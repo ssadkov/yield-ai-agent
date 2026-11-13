@@ -2,7 +2,9 @@
  * Server-side credit operations shared by the routes and the NEAR AI proxy.
  */
 import { computeBalance, type CreditBalance } from "./ledger.ts";
+import { clientIp, guestKey, trialLimits, trialState, type TrialState } from "./trial.ts";
 import {
+  trialUsageToday,
   listPurchases,
   purchasedUsd,
   setUsageCost,
@@ -12,16 +14,36 @@ import {
   type Purchase,
 } from "./db.ts";
 import { loadSafeSummary } from "../agent/safeSummary.server.ts";
-import { ADVISOR_MODELS } from "../advisor/models.ts";
+import type { SafeSummary } from "../agent/safeSummary.ts";
+import { DEFAULT_ADVISOR_MODEL } from "../advisor/models.ts";
 import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
+
+/** The wallet's Safe, or null when it cannot be read right now. */
+async function safeOrNull(wallet: string): Promise<SafeSummary | null> {
+  try {
+    return await loadSafeSummary(wallet);
+  } catch {
+    return null;
+  }
+}
 
 /** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
 export async function yieldBudgetUsd(wallet: string): Promise<number> {
-  try {
-    return (await loadSafeSummary(wallet)).accruedFeeUsdc;
-  } catch {
-    return 0;
-  }
+  return (await safeOrNull(wallet))?.accruedFeeUsdc ?? 0;
+}
+
+/** USDC the Safe holds, idle or in Kamino. */
+function safeDepositUsdc(safe: SafeSummary | null): number {
+  return safe?.exists ? safe.idleUsdc + safe.kamino.valueUsdc : 0;
+}
+
+/**
+ * Open chat (and its uncensored model) is for wallets with skin in the game: USDC in their Safe,
+ * or credits they bought. Everyone else gets Yield Advisor.
+ */
+export async function openChatUnlocked(wallet: string): Promise<boolean> {
+  if ((await purchasedUsd(wallet)) > 0) return true;
+  return safeDepositUsdc(await safeOrNull(wallet)) > 0;
 }
 
 export const ONE_CLICK = "https://1click.chaindefuser.com/v0";
@@ -48,6 +70,21 @@ export function purchaseDestination(): { asset: string; recipient: string; decim
   const recipient = process.env.CREDITS_RECEIVER?.trim();
   if (!recipient) return null;
   return { asset: process.env.CREDITS_DESTINATION_ASSET?.trim() || SOLANA_USDC, recipient, decimals: 6 };
+}
+
+/** Free-trial state for a visitor without a wallet session; null when there is no trial for them. */
+export async function visitorTrial(request: Request): Promise<{ guest: string; state: TrialState } | null> {
+  const guest = guestKey(clientIp(request));
+  if (!guest) return null;
+  const usage = await trialUsageToday(guest);
+  return {
+    guest,
+    state: trialState({
+      guestRequestsToday: usage.guestRequests,
+      allGuestsUsdToday: usage.allGuestsUsd,
+      limits: trialLimits(),
+    }),
+  };
 }
 
 /** Replace estimates with NEAR AI's billed cost for requests that have one by now. */
@@ -77,14 +114,14 @@ export async function reconcileCosts(): Promise<number> {
 
 export async function walletBalance(wallet: string): Promise<CreditBalance> {
   await reconcileCosts().catch(() => 0);
-  const [purchased, spend, fromYield] = await Promise.all([
-    purchasedUsd(wallet),
-    spendByMonth(wallet),
-    yieldBudgetUsd(wallet),
-  ]);
+  return balanceFrom(wallet, await safeOrNull(wallet));
+}
+
+async function balanceFrom(wallet: string, safe: SafeSummary | null): Promise<CreditBalance> {
+  const [purchased, spend] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet)]);
   return computeBalance({
     freeMonthlyUsd: freeMonthlyUsd(),
-    yieldUsd: fromYield,
+    yieldUsd: safe?.accruedFeeUsdc ?? 0,
     purchasedUsd: purchased,
     spendByMonth: spend,
     now: new Date(),
@@ -101,7 +138,7 @@ export async function advisorModelPrice(): Promise<ModelPrice | null> {
   try {
     const response = await fetch("https://cloud-api.near.ai/v1/models", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
     const json = (await response.json()) as { data?: { id: string; pricing?: { input?: number; output?: number } }[] };
-    const row = json.data?.find((m) => m.id === ADVISOR_MODELS[0]);
+    const row = json.data?.find((m) => m.id === DEFAULT_ADVISOR_MODEL);
     if (!row?.pricing?.input || !row.pricing.output) return null;
     const price = { model: row.id, inputUsdPerMillion: row.pricing.input, outputUsdPerMillion: row.pricing.output };
     priceCache = { at: Date.now(), price };
@@ -114,7 +151,7 @@ export async function advisorModelPrice(): Promise<ModelPrice | null> {
 /** What the available dollars buy on the primary model: output tokens, or typical advisor requests. */
 export function estimateRemaining(availableUsd: number, price: ModelPrice | null) {
   return {
-    model: price?.model ?? ADVISOR_MODELS[0],
+    model: price?.model ?? DEFAULT_ADVISOR_MODEL,
     outputTokens: price ? Math.floor((availableUsd / price.outputUsdPerMillion) * 1_000_000) : null,
     typicalRequests: Math.floor(availableUsd / TYPICAL_REQUEST_USD),
     typicalRequestUsd: TYPICAL_REQUEST_USD,
@@ -127,14 +164,18 @@ export async function walletSummary(wallet: string): Promise<{
   usage: Awaited<ReturnType<typeof usageTotals>>;
   price: ModelPrice | null;
   remaining: ReturnType<typeof estimateRemaining>;
+  /** Whether Open chat is unlocked: USDC in the Safe or any credited purchase. */
+  openChat: boolean;
 }> {
   // Billed costs first, so usage totals and the balance read the same numbers.
   await reconcileCosts().catch(() => 0);
+  const safe = await safeOrNull(wallet);
   const [balance, purchases, usage, price] = await Promise.all([
-    walletBalance(wallet),
+    balanceFrom(wallet, safe),
     listPurchases(wallet),
     usageTotals(wallet),
     advisorModelPrice(),
   ]);
-  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price) };
+  const openChat = purchases.some((p) => p.credited) || safeDepositUsdc(safe) > 0;
+  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price), openChat };
 }

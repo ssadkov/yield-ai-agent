@@ -171,7 +171,7 @@ export function AgentHome() {
       <WalletDialog
         open={session.dialog === "solana"}
         title="Solana wallets"
-        description="Connecting derives an Aptos account for this site. You sign with the Solana wallet."
+        description="Phantom, Solflare or Backpack. You sign every transaction yourself."
         wallets={session.solanaChoices}
         pendingId={session.pendingId}
         onClose={closeDialog}

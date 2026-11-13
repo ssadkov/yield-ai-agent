@@ -129,6 +129,19 @@ export async function usageTotals(wallet: string): Promise<{ month: TokenTotals;
   return { month, total };
 }
 
+/** Today's (UTC) requests by one trial visitor, and dollars spent by all trial visitors. */
+export async function trialUsageToday(guest: string): Promise<{ guestRequests: number; allGuestsUsd: number }> {
+  const db = await ready();
+  const [row] = rows(
+    await db`select count(*) filter (where wallet = ${guest}) as mine,
+                    coalesce(sum(coalesce(cost_usd, estimated_usd)), 0) as usd
+             from advisor_usage
+             where wallet like 'guest:%'
+               and created_at >= date_trunc('day', now() at time zone 'UTC') at time zone 'UTC'`
+  );
+  return { guestRequests: Number(row?.mine ?? 0), allGuestsUsd: Number(row?.usd ?? 0) };
+}
+
 export async function spendByMonth(wallet: string): Promise<MonthSpend[]> {
   const db = await ready();
   const result = rows(
