@@ -1,6 +1,6 @@
 // NEAR AI Cloud image probe: E2EE vision (image inside the encrypted content) and FLUX image generation.
 // Reads NEAR_AI_API_KEY from .env.local in the repo root. Never prints the key.
-// Usage: node scripts/near-ai-image-probe.mjs
+// Usage: node scripts/near-ai-image-probe.mjs   (env: PROMPT="…" for FLUX, SAVE_IMAGE=path.jpg to keep the decrypted picture)
 // The model key is taken from the first attestation candidate WITHOUT full verification — probe only.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -90,7 +90,7 @@ try {
   const t = Date.now();
   const r = await fetch(`${API}/v1/images/generations`, {
     method: "POST", headers: e2eeHeaders(k.edPub),
-    body: JSON.stringify({ model: FLUX, prompt: encrypt("a single red circle on a white background", k.x), size: "256x256", n: 1, response_format: "b64_json" }),
+    body: JSON.stringify({ model: FLUX, prompt: encrypt(process.env.PROMPT || "a single red circle on a white background", k.x), size: "256x256", n: 1, response_format: "b64_json" }),
   });
   const text = await r.text();
   let j = null; try { j = JSON.parse(text); } catch {}
