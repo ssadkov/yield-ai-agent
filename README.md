@@ -8,7 +8,7 @@ Built at **NEAR HACKATHON** (2026-11-01 to 2026-11-14) on top of the existing [Y
 - Tracks: `privacy`, `defi`, `agents`
 - Code: Sergei Sadkov ([@ssadkov](https://github.com/ssadkov)), Rustam Galiev ([@galiev-rustam](https://github.com/galiev-rustam))
 
-> **Status on 2026-11-13.** Open chat, pictures, the no-wallet free trial and deposits from any chain are in [PR #14](https://github.com/ssadkov/yield-ai-agent/pull/14) and the `polish/first-screen` branch. This README describes the app with those merged. Until they are merged and deployed, the live page shows the Yield Advisor only, and some links to files below do not resolve on `main`.
+> **Status on 2026-11-13, 21:45 UTC.** Open chat and the no-wallet free trial are on `main`. Pictures (attached and FLUX.2), the single Earn card and deposits from any chain through NEAR Intents are on the `polish/first-screen` branch and not yet on `main` or the live page. This README describes the app with that branch merged; until then, steps 4 to 6 of "Try it" and some file links below do not match `main`.
 
 ## The problem
 
@@ -146,6 +146,8 @@ Each request is first reserved at an upper bound and then replaced by the cost N
 
 Sign-in is one Solana `signMessage` over a server challenge ([`session.ts`](src/lib/credits/session.ts)); it gates credits and Open chat, not privacy.
 
+There is no email, no card and no account. The only identifier is a wallet address, and credits are paid for in crypto through NEAR Intents, so paying for the AI does not attach a name to it. A wallet address is pseudonymous, not anonymous: deposits and purchases are visible on chain.
+
 ## What our server can and cannot see
 
 | Cannot see | Can see |
@@ -155,6 +157,7 @@ Sign-in is one Solana `signMessage` over a server challenge ([`session.ts`](src/
 | The chat history (kept in your browser's `localStorage`) | Which model you use, request sizes and timing |
 | | Token counts and cost of each request (the last stream chunk carries usage in clear) |
 | | That a tool ran: `get_usdc_yields` and `get_my_account` fetch this app's own API, the second with your wallet address |
+| | Page views (Vercel Web Analytics) |
 
 NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your browser and inside the attested enclave.
 
