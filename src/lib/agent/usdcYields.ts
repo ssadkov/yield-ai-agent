@@ -1,3 +1,4 @@
+import { SAFE_PERFORMANCE_FEE_BPS, SAFE_PERFORMANCE_FEE_PCT } from "./fees.ts";
 /**
  * USDC yields across the destinations a Yield AI Safe can deposit into now.
  * Server-side only: it calls the Solana Safe API (and, when enabled, the main app's API).
@@ -127,7 +128,7 @@ export function normalizeKamino(body: unknown): UsdcYield[] {
       risk: "Lending and private-credit risk of the Kamino vault; smart-contract risk. Withdrawals depend on vault liquidity.",
       caveats: [
         "Variable rate published by Kamino; it changes daily.",
-        "Yield AI takes 5% of realized gain on exit; not included in the rate.",
+        `Yield AI takes ${SAFE_PERFORMANCE_FEE_PCT}% of the realized gain on exit, and that fee becomes the user's AI credits; not included in the rate.`,
         "Network fees not included.",
       ],
       source: String(b.source ?? "Kamino API"),
@@ -147,7 +148,6 @@ export function normalizeExponent(body: unknown, now = Date.now()): UsdcYield[] 
   const deposit = num(b.referenceAmountUsdc);
   const receive = num(b.projectedNetUsdc);
   const feeBps = num(b.displayProfitFeeBps);
-  const pilotFeeBps = num(b.pilotProfitFeeBps);
   const caveats = [
     `Indicative quote for ${deposit ?? 100} USDC at current NAV and DEX liquidity; a larger amount gets a worse price.`,
     maturity === null
@@ -156,7 +156,9 @@ export function normalizeExponent(body: unknown, now = Date.now()): UsdcYield[] 
         ? "Matured: no new purchases."
         : `Fixed rate only if held to ${maturity.slice(0, 10)} (${daysToMaturity} days); an early exit sells PT at market.`,
     feeBps !== null
-      ? `Includes the projected ${feeBps / 100}% Yield AI profit fee${pilotFeeBps === 0 ? "; the pilot fee is 0%" : ""}.`
+      ? feeBps === SAFE_PERFORMANCE_FEE_BPS
+        ? `Includes the projected ${feeBps / 100}% Yield AI profit fee.`
+        : `The projection assumes a ${feeBps / 100}% profit fee; the Safe program now takes ${SAFE_PERFORMANCE_FEE_PCT}% of the gain, so the net would be lower.`
       : "Yield AI profit fee: see source.",
     "Network fees and rent not included.",
   ];

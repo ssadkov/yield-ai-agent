@@ -76,7 +76,7 @@ test("Exponent: fixed APY with maturity, days left and projected payout", () => 
   assert.deepEqual(row.projectedAtMaturity, { depositUsdc: 100, receiveUsdc: 102.021973 });
   assert.equal(row.agentExecutable, true);
   assert.ok(row.caveats.some((c) => c.includes("2027-01-10 (61 days)")));
-  assert.ok(row.caveats.some((c) => c.includes("5% Yield AI profit fee; the pilot fee is 0%")));
+  assert.ok(row.caveats.some((c) => c.includes("assumes a 5% profit fee; the Safe program now takes 20%")));
 });
 
 test("Exponent: a matured market is listed but not executable", () => {
