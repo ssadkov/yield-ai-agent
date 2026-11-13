@@ -16,6 +16,8 @@ export const DEFAULT_PRODUCT_ID = "prod_33Kp14MGUJa2QA";
 export const CREDIT_USD_PER_UNIT = 1e-6;
 /** Typical advisor request on z-ai/glm-5.3-flash (~8k tokens in, ~500 out), measured 2026-11-07. */
 export const TYPICAL_REQUEST_USD = 0.001;
+/** Output tokens of the advisor model (GLM 5.3 Flash, $0.50 per 1M on 2026-11-12) per dollar. */
+export const TOKENS_PER_USD = 2_000_000;
 
 const UNIT_SCALE = BigInt(10) ** BigInt(18);
 const YOCTO = BigInt(10) ** BigInt(24);

@@ -1,16 +1,44 @@
-# Yield AI Agent
+<div align="center">
 
-**Your yield pays for your private AI.** A chat advisor that nobody but you can read, an on-chain account that earns on your USDC, and a meter that turns the fee on what you earn into AI credits.
+<img src="docs/assets/banner.png" alt="Yield AI Agent: your yield pays for your private AI" width="820">
 
-Built at **NEAR HACKATHON** (2026-11-01 to 2026-11-14) on top of the existing [Yield AI](https://yieldai.app) product. Yield AI itself runs on Solana and Aptos and existed before the hackathon; what is judged here is the NEAR integration written in the window. See [Built before and built in the window](#built-before-and-built-in-the-window).
+# 🤖 Yield AI Agent
 
-- Live: **https://yieldai.app/agent** (mainnet, real funds, deposits capped at 101 USDC)
-- Tracks: `privacy`, `defi`, `agents`
-- Code: Sergei Sadkov ([@ssadkov](https://github.com/ssadkov)), Rustam Galiev ([@galiev-rustam](https://github.com/galiev-rustam))
+### Your yield pays for your private AI.
 
-> **Status on 2026-11-13, 21:45 UTC.** Open chat and the no-wallet free trial are on `main`. Pictures (attached and FLUX.2), the single Earn card and deposits from any chain through NEAR Intents are on the `polish/first-screen` branch and not yet on `main` or the live page. This README describes the app with that branch merged; until then, steps 4 to 6 of "Try it" and some file links below do not match `main`.
+A chat advisor that nobody but you can read 🔒, an on-chain account that earns on your USDC 💸,<br>
+and a meter that turns the fee on what you earn into AI credits ⚡
 
-## The problem
+[![Live demo](https://img.shields.io/badge/live_demo-yieldai.app%2Fagent-34d399?style=for-the-badge)](https://yieldai.app/agent)
+
+![NEAR AI Cloud](https://img.shields.io/badge/NEAR_AI_Cloud-TEE_%2B_E2EE-7fb0ff?style=flat-square)
+![NEAR Intents](https://img.shields.io/badge/NEAR_Intents-1--Click-7fb0ff?style=flat-square)
+![Solana](https://img.shields.io/badge/Solana-Safe_program-a78bfa?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-64_passing-34d399?style=flat-square)
+[![License: MIT](https://img.shields.io/badge/license-MIT-8b9bb3?style=flat-square)](LICENSE)
+
+**Tracks:** `privacy` · `defi` · `agents`
+
+</div>
+
+Built at **NEAR HACKATHON** (2026-11-01 to 2026-11-14) on top of the existing [Yield AI](https://yieldai.app) product. Yield AI itself runs on Solana and Aptos and existed before the hackathon; what is judged here is the NEAR integration written in the window. See [Built before and built in the window](#-built-before-and-built-in-the-window).
+
+Code: Sergei Sadkov ([@ssadkov](https://github.com/ssadkov)), Rustam Galiev ([@galiev-rustam](https://github.com/galiev-rustam)).
+
+> [!WARNING]
+> The live app runs on **mainnet with real funds**. Deposits are capped at 101 USDC.
+
+## ⏳ Judge in a hurry?
+
+| You have | Do this | You see |
+|---|---|---|
+| **1 minute** | Open [yieldai.app/agent](https://yieldai.app/agent) and click a starter question. No wallet. | The badge turns **Private · TEE ✓**, and the answer comes with today's rates. |
+| **2 minutes** | Run the two `curl` lines in [step 2](#2-check-that-the-server-only-sees-ciphertext-2-minutes). | Our own server refuses plaintext: `400 E2EE v2 required`. |
+| **5 minutes** | Connect a Solana wallet and follow [steps 3 to 6](#3-connect-a-wallet-phantom-solflare-or-backpack). | Money arrives from another chain, starts earning, and the yield starts paying for AI. |
+
+**On this page:** [Problem](#-the-problem) · [What it is](#-what-this-is) · [Try it](#-try-it) · [How NEAR is used](#-how-near-is-used) · [Agentic wallet](#-the-agentic-wallet-propose-check-sign) · [AI credits](#-ai-credits) · [What the server sees](#-what-our-server-can-and-cannot-see) · [Limitations](#-limitations) · [Before / in the window](#-built-before-and-built-in-the-window) · [Run locally](#-run-locally)
+
+## 🤔 The problem
 
 Two things stop people from asking an AI about their money.
 
@@ -19,14 +47,26 @@ Two things stop people from asking an AI about their money.
 
 On top of that, good private inference is not free, and a subscription is one more card on file.
 
-## What this is
+## 🧩 What this is
 
 - **A private chat.** Your browser verifies the model's TEE attestation, then encrypts every message to a key that only exists inside that enclave on NEAR AI Cloud. Our server forwards ciphertext and adds the API key. It cannot read the conversation, and neither can we.
 - **An account that earns.** A Solana Safe (program [`yie1Jjq6…`](https://solscan.io/account/yie1Jjq6y3rjsiGkgMYnwTveSgpSrSh4n41JHRNyBih)) that only your wallet can move funds out of. It puts USDC into Kamino. You can fund it from 10 networks through NEAR Intents.
 - **An agent that proposes and never signs.** The model reads live rates and your balances through tools and proposes a plan. The browser checks every transaction byte by byte against what you asked for before your wallet sees it.
 - **AI that the yield pays for.** The Safe program takes a performance fee on Kamino gains only (2000 bps on chain, read on 2026-11-13). That fee is your AI budget. Everyone also gets a small free allowance, and credits can be bought with any listed token.
 
-## Try it
+### The loop in one picture
+
+```mermaid
+flowchart LR
+    A["💰 Any chain<br/>USDC · USDT · ETH · BTC · NEAR"] -->|"NEAR Intents 1-Click"| S["🏦 Your Solana Safe<br/>only your wallet withdraws"]
+    S -->|"one signature"| K["📈 Kamino USDC vault"]
+    K -->|"yield"| S
+    S -->|"performance fee on the gain"| F["⚡ Your AI credits"]
+    F --> C["🔒 Private chat<br/>model in a TEE on NEAR AI Cloud"]
+    C -.->|"proposes a plan,<br/>your browser checks it,<br/>you sign"| S
+```
+
+## 🚀 Try it
 
 Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no money.
 
@@ -80,9 +120,27 @@ Open chat unlocks once the Safe holds USDC or the wallet has bought credits.
 
 **Earn on USDC → Withdraw → All.** Two signatures: redeem from Kamino (the program sends its fee on the gain to the treasury), then send the USDC to your wallet. The card ends with "N USDC is back in your wallet".
 
-## How NEAR is used
+## 🌐 How NEAR is used
 
-### NEAR AI Cloud: private inference
+### 🔒 NEAR AI Cloud: private inference
+
+```mermaid
+sequenceDiagram
+    participant B as 🧑 Your browser
+    participant P as Yield AI server (blind proxy)
+    participant T as 🔒 Model in a TEE (NEAR AI Cloud)
+    B->>P: attestation request, fresh nonce
+    P->>T: forward
+    T-->>B: TDX quote, GPU evidence, model key
+    Note over B: Verify. If it fails, nothing is sent.
+    B->>P: message encrypted to the model key
+    Note over P: sees hex, adds the API key
+    P->>T: ciphertext
+    T-->>B: answer encrypted to the browser key
+    B->>P: ask for the signature over request + response
+    T-->>B: signature
+    Note over B: Check the signer is the attested key
+```
 
 All of this runs in the browser; code in [`src/lib/advisor`](src/lib/advisor).
 
@@ -102,7 +160,7 @@ Only models that NEAR itself hosts with attestation are used. There is no fallba
 
 The advisor has four tools, all executed by the browser ([`tools.ts`](src/lib/advisor/tools.ts)): `get_usdc_yields`, `get_my_account`, `show_action_card` and `propose_plan`. The model cannot sign, send or spend.
 
-### NEAR Intents 1-Click: money in from any chain
+### 🌉 NEAR Intents 1-Click: money in from any chain
 
 | Where | What happens | Code |
 |---|---|---|
@@ -112,11 +170,11 @@ The advisor has four tools, all executed by the browser ([`tools.ts`](src/lib/ad
 
 The Safe address is a program-derived address, so 1-Click pays into its USDC token account directly. No JWT is used; 1-Click's standard 0.2% fee applies.
 
-### NEAR mainnet: the pool behind the free allowance
+### 🪙 NEAR mainnet: the pool behind the free allowance
 
 The free allowance is paid from NEAR staked through NEAR AI "Staking for Inference", whose rewards arrive as NEAR AI Cloud credits. [`aiPool.ts`](src/lib/advisor/aiPool.ts) reads that position from NEAR mainnet (`stake.dao`, `get_farm_position`) and the page shows the staked amount and the measured reward rate, with the time of the reading. Try it: `curl https://yieldai.app/agent/api/ai-pool`.
 
-## The agentic wallet: propose, check, sign
+## 🔐 The agentic wallet: propose, check, sign
 
 The Safe is a program-derived account of the Yield AI Solana program [`yie1Jjq6y3rjsiGkgMYnwTveSgpSrSh4n41JHRNyBih`](https://github.com/ssadkov/yield-ai-os-sol). It holds USDC and Kamino vault shares. Withdrawals go only to the owner's wallet. The program tracks the principal and takes its performance fee on a Kamino exit. The program and its transaction-building API existed before the hackathon.
 
@@ -134,7 +192,7 @@ What was written in the window is the path from a chat answer to a signature ([`
 
 Tool results and anything the model reads are treated as data. A prompt injection can at most make the model propose a plan that this check rejects.
 
-## AI credits
+## ⚡ AI credits
 
 One balance in dollars of NEAR AI usage, spent in this order ([`ledger.ts`](src/lib/credits/ledger.ts)):
 
@@ -148,7 +206,7 @@ Sign-in is one Solana `signMessage` over a server challenge ([`session.ts`](src/
 
 There is no email, no card and no account. The only identifier is a wallet address, and credits are paid for in crypto through NEAR Intents, so paying for the AI does not attach a name to it. A wallet address is pseudonymous, not anonymous: deposits and purchases are visible on chain.
 
-## What our server can and cannot see
+## 👀 What our server can and cannot see
 
 | Cannot see | Can see |
 |---|---|
@@ -161,7 +219,7 @@ There is no email, no card and no account. The only identifier is a wallet addre
 
 NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your browser and inside the attested enclave.
 
-## Limitations
+## 🚧 Limitations
 
 - **Mainnet and real funds.** NEAR Intents has no testnet. Deposits are capped at 101 USDC while the Safe program has a single admin key.
 - **Trust assumptions.** Privacy rests on Intel TDX and NVIDIA attestation and on NEAR AI's SDK that verifies them. The SDK is patched to tolerate a 2-minute clock skew in NVIDIA's token ([`patches/`](patches)).
@@ -174,7 +232,7 @@ NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your b
 - **Solana only in this demo.** Aptos is wired underneath (the wallet adapter is shared with the main app) and hidden with a flag.
 - **Not audited.** Not financial advice. Rates are read live from Kamino and Exponent and change.
 
-## Built before and built in the window
+## 📅 Built before and built in the window
 
 Hackathon rules Q-001, Q-002, Q-003 and Q-005.
 
@@ -212,7 +270,7 @@ Changes to baseline code during the window: the main app got a proxy that serves
 
 Parts of the code were written with AI coding agents (Claude Code).
 
-## Run locally
+## 💻 Run locally
 
 Requires Node 22.18 or later and pnpm 10.
 
@@ -252,10 +310,10 @@ node scripts/near-ai-e2ee-probe.mjs   # encrypted round trip against NEAR AI, ne
 
 A Solana wallet on `localhost` works for the chat and for reading balances. The Safe address depends only on the wallet, so it is the same on every host.
 
-## Deploy
+## 🚢 Deploy
 
 The app has `basePath: /agent` and is a separate Vercel project. In production the main Yield AI app proxies `https://yieldai.app/agent` to it, so the browser stays on `yieldai.app`. The `*.vercel.app` URL is only for smoke tests. The hosted demo stays up at least until 2026-11-25.
 
-## License
+## 📄 License
 
 [MIT](LICENSE).

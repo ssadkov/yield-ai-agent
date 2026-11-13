@@ -5,6 +5,7 @@
  */
 import { PublicKey } from "@solana/web3.js";
 import { KAMINO_USDC_VAULT, summarizeSafe, type SafeSummary } from "./safeSummary.ts";
+import { realizedFeesUsdc } from "../credits/realizedFees.ts";
 
 const SAFE_API = () =>
   `${process.env.SOLANA_SAFE_API_ORIGIN?.trim() || "https://yield-ai-solana-mainnet.vercel.app"}/api/mobile/v1`;
@@ -14,7 +15,7 @@ const CACHE_MS = 60_000;
 
 const cache = new Map<string, { at: number; value: SafeSummary }>();
 let shareCache: { at: number; tokensPerShare: number } | null = null;
-let feeCache: { at: number; bps: number } | null = null;
+let feeCache: { at: number; bps: number; treasury: string } | null = null;
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(20_000) });
@@ -31,8 +32,9 @@ async function tokensPerShare(): Promise<number> {
   return value;
 }
 
-async function performanceFeeBps(): Promise<number> {
-  if (feeCache && Date.now() - feeCache.at < 10 * 60_000) return feeCache.bps;
+/** The Safe program's config: performance fee and treasury. */
+async function safeConfig(): Promise<{ bps: number; treasury: string }> {
+  if (feeCache && Date.now() - feeCache.at < 10 * 60_000) return feeCache;
   const [config] = PublicKey.findProgramAddressSync([Buffer.from("config")], SAFE_PROGRAM);
   const result = await json<{ result?: { value?: { data?: [string, string]; owner?: string } } }>(RPC(), {
     method: "POST",
@@ -41,24 +43,41 @@ async function performanceFeeBps(): Promise<number> {
   });
   const value = result.result?.value;
   if (!value?.data || value.owner !== SAFE_PROGRAM.toBase58()) throw new Error("Safe config unavailable");
-  const bps = Buffer.from(value.data[0], "base64").readUInt16LE(72);
-  feeCache = { at: Date.now(), bps };
-  return bps;
+  const data = Buffer.from(value.data[0], "base64");
+  feeCache = { at: Date.now(), bps: data.readUInt16LE(72), treasury: new PublicKey(data.subarray(40, 72)).toBase58() };
+  return feeCache;
 }
 
-export async function loadSafeSummary(owner: string, fresh = false): Promise<SafeSummary> {
+/**
+ * `scanFees` also reads the Safe's new transactions for realized fees (a few seconds at most);
+ * without it the cached realized total is used, which is what chat requests need.
+ */
+export async function loadSafeSummary(owner: string, fresh = false, scanFees = false): Promise<SafeSummary> {
   const hit = cache.get(owner);
-  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+  if (!fresh && !scanFees && hit && Date.now() - hit.at < CACHE_MS) return hit.value;
   const q = `ownerType=solana&address=${encodeURIComponent(owner)}&cluster=mainnet`;
   const state = await json<Parameters<typeof summarizeSafe>[0]["state"]>(`${SAFE_API()}/safes?${q}`);
-  const [position, perShare, feeBps] = await Promise.all([
+  const [position, perShare, config] = await Promise.all([
     state.exists
       ? json<{ sharesRaw?: string; sharesDecimals?: number; principalUsdc?: string }>(`${SAFE_API()}/protocols/kamino/position?${q}`)
       : Promise.resolve(null),
     tokensPerShare(),
-    performanceFeeBps(),
+    safeConfig(),
   ]);
-  const value = summarizeSafe({ owner, state, position, tokensPerShare: perShare, performanceFeeBps: feeBps });
+  const realized =
+    state.exists && state.safe
+      ? await realizedFeesUsdc({ safe: state.safe, owner, treasury: config.treasury }, { scan: scanFees }).catch(
+          () => hit?.value.realizedFeeUsdc ?? 0
+        )
+      : 0;
+  const value = summarizeSafe({
+    owner,
+    state,
+    position,
+    tokensPerShare: perShare,
+    performanceFeeBps: config.bps,
+    realizedFeeUsdc: realized,
+  });
   cache.set(owner, { at: Date.now(), value });
   return value;
 }

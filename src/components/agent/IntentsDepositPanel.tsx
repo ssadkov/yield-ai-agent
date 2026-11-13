@@ -34,7 +34,7 @@ import { SHOW_APTOS } from "@/lib/agent/features";
 
 /** Test-sized deposits only, while the flow is unproven on mainnet. */
 const MIN_RAW = BigInt(1_000_000);
-const MAX_RAW = BigInt(5_000_000);
+const MAX_RAW = BigInt(101_000_000);
 const SLIPPAGE_BPS = 100;
 const POLL_MS = 5_000;
 const QUOTE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -99,9 +99,12 @@ function loadPanelOpen(): boolean {
 export function IntentsDepositPanel({
   aptosAddress,
   aptosIsDerived,
+  embedded = false,
 }: {
   aptosAddress: string | null;
   aptosIsDerived: boolean;
+  /** Inside the Deposit window: always open, no collapsible header. */
+  embedded?: boolean;
 }) {
   const { publicKey, connected, sendTransaction } = useWallet();
   const owner = connected && publicKey ? publicKey.toBase58() : null;
@@ -184,11 +187,11 @@ export function IntentsDepositPanel({
   const blocker = (() => {
     if (!owner) return "Connect the Solana wallet in this browser first.";
     if (amountRaw === null) return "Enter a USDC amount, up to 6 decimals.";
-    if (amountRaw < MIN_RAW || amountRaw > MAX_RAW) return "Test amounts only: 1 to 5 USDC.";
+    if (amountRaw < MIN_RAW || amountRaw > MAX_RAW) return "Demo limit: 1 to 101 USDC.";
     if (!safe) return safeError ?? "Reading the wallet…";
     if (safe.walletUsdcRaw < amountRaw) return `This wallet holds ${formatUsdc(safe.walletUsdcRaw)} USDC on Solana.`;
     if (destination === "solana-safe") {
-      if (!safe.safeExists) return "This wallet has no Solana Safe yet. Create it in the Yield AI Solana app first.";
+      if (!safe.safeExists) return "No account yet. Deposit once from this wallet to create it, then come back here.";
       if (!safe.safeUsdcAtaExists) return "The Safe has no USDC account yet. Re-open it in the Safe app so it is created.";
     } else if (!aptos?.formulaVerified) {
       return "The derived Aptos address could not be verified on this host, so the Aptos route is off.";
@@ -378,7 +381,11 @@ export function IntentsDepositPanel({
   }
 
   return (
-    <section aria-label="Deposit test" className="panel-glass overflow-hidden rounded-2xl">
+    <section
+      aria-label="Deposit with NEAR Intents"
+      className={embedded ? "overflow-hidden rounded-2xl border border-border/70" : "panel-glass overflow-hidden rounded-2xl"}
+    >
+      {embedded ? null : (
       <button
         type="button"
         aria-expanded={open}
@@ -419,9 +426,10 @@ export function IntentsDepositPanel({
           </svg>
         </span>
       </button>
+      )}
 
-      {open ? (
-        <div className="border-t border-border">
+      {embedded || open ? (
+        <div className={embedded ? "" : "border-t border-border"}>
           <div className="space-y-3 px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted-foreground">Destination</p>

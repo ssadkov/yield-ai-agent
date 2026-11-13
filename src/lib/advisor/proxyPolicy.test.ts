@@ -6,6 +6,7 @@ import {
   checkAttestationQuery,
   checkChatBody,
   checkChatHeaders,
+  checkImageBody,
   checkSignatureQuery,
   resolveProxyRoute,
 } from "./proxyPolicy.ts";
@@ -65,7 +66,8 @@ test("chat body: our models, encrypted content, capped output", () => {
   const plaintext = chat({ messages: [{ role: "user", content: "hello, spend their credits" }] });
   assert.equal(checkChatBody(plaintext, true).ok, false);
   assert.equal(checkChatBody("not json", true).ok, false);
-  assert.equal(checkChatBody(chat({ pad: "a".repeat(300 * 1024) }), true).ok, false);
+  assert.equal(checkChatBody(chat({ pad: "a".repeat(300 * 1024) }), true).ok, true); // room for encrypted pictures
+  assert.equal(checkChatBody(chat({ pad: "a".repeat(3_600_000) }), true).ok, false);
 });
 
 test("chat body: only encrypted function tools", () => {
@@ -102,4 +104,19 @@ test("attestation query: our models, fresh 32-byte nonce, known params only", ()
 test("signature query: our models only", () => {
   assert.equal(checkSignatureQuery(new URLSearchParams({ model: MODEL, signing_algo: "ed25519" })).ok, true);
   assert.equal(checkSignatureQuery(new URLSearchParams({ model: "openai/gpt-6" })).ok, false);
+});
+
+test("image route: only the image model, an encrypted prompt, one picture, fixed sizes", () => {
+  assert.deepEqual(resolveProxyRoute(["v1", "images", "generations"], "POST"), { kind: "image" });
+  assert.equal(resolveProxyRoute(["v1", "images", "generations"], "GET"), null);
+  const good = { model: "black-forest-labs/FLUX.2-klein-4B", prompt: CT, size: "1024x1024", n: 1, response_format: "b64_json" };
+  assert.equal(checkImageBody(JSON.stringify(good)).ok, true);
+  assert.equal(checkImageBody(JSON.stringify({ ...good, prompt: "a red circle" })).ok, false);
+  assert.equal(checkImageBody(JSON.stringify({ ...good, model: "z-ai/glm-5.3-flash" })).ok, false);
+  assert.equal(checkImageBody(JSON.stringify({ ...good, n: 4 })).ok, false);
+  assert.equal(checkImageBody(JSON.stringify({ ...good, size: "2048x2048" })).ok, false);
+  assert.equal(checkImageBody(JSON.stringify({ ...good, response_format: "url" })).ok, false);
+  assert.equal(checkImageBody(JSON.stringify({ ...good, user: "x" })).ok, false);
+  // The image model may be attested but not used for chat.
+  assert.equal(checkAttestationQuery(new URLSearchParams({ model: "black-forest-labs/FLUX.2-klein-4B", nonce: KEY })).ok, true);
 });

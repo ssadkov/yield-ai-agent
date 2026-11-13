@@ -3,9 +3,10 @@
  * Anything else is refused, so the key cannot be used for other models, plaintext prompts,
  * built-in paid tools or oversized requests. Pure functions, unit-tested in proxyPolicy.test.ts.
  */
-import { ADVISOR_MODELS } from "./models.ts";
+import { ADVISOR_MODELS, IMAGE_MODEL } from "./models.ts";
 
-export const MAX_CHAT_BODY_BYTES = 256 * 1024;
+/** Encrypted chat with up to 3 downscaled pictures (~0.7 MB each as hex ciphertext); Vercel allows 4.5 MB. */
+export const MAX_CHAT_BODY_BYTES = 3_500_000;
 export const MAX_OUTPUT_TOKENS = 1200;
 export const MAX_MESSAGES = 60;
 
@@ -35,12 +36,14 @@ function isCiphertext(value: unknown): boolean {
 
 export type ProxyRoute =
   | { kind: "chat" }
+  | { kind: "image" }
   | { kind: "attestation" }
   | { kind: "signature"; id: string };
 
 export function resolveProxyRoute(parts: readonly string[], method: string): ProxyRoute | null {
   const path = parts.join("/");
   if (path === "v1/chat/completions" && method === "POST") return { kind: "chat" };
+  if (path === "v1/images/generations" && method === "POST") return { kind: "image" };
   if (path === "v1/attestation/report" && method === "GET") return { kind: "attestation" };
   const signature = /^v1\/signature\/([^/]+)$/.exec(path);
   if (signature && method === "GET" && SIGNATURE_ID.test(signature[1])) {
@@ -54,7 +57,7 @@ export function checkAttestationQuery(params: URLSearchParams): PolicyResult {
     if (!ATTESTATION_PARAMS.has(key)) return deny(400, `Unexpected parameter: ${key}`);
   }
   const model = params.get("model");
-  if (!model || !MODELS.has(model)) return deny(403, "Model not allowed");
+  if (!model || (!MODELS.has(model) && model !== IMAGE_MODEL)) return deny(403, "Model not allowed");
   const provider = params.get("provider");
   if (provider !== null && provider !== "near") return deny(400, "provider must be near");
   const nonce = params.get("nonce");
@@ -145,5 +148,32 @@ export function checkChatBody(raw: string, encryptAllFields: boolean): PolicyRes
       }
     }
   }
+  return ok;
+}
+
+export const IMAGE_SIZES: ReadonlySet<string> = new Set(["512x512", "1024x1024"]);
+const IMAGE_FIELDS = new Set(["model", "prompt", "size", "n", "response_format"]);
+
+/**
+ * One picture from the image model, E2EE: the prompt is ciphertext (the reply's picture and revised
+ * prompt come back encrypted to the browser), one image, a fixed size, base64 output only.
+ */
+export function checkImageBody(raw: string): PolicyResult {
+  if (raw.length > 64 * 1024) return deny(413, "Request too large");
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return deny(400, "Body must be JSON");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return deny(400, "Body must be an object");
+  for (const key of Object.keys(body)) {
+    if (!IMAGE_FIELDS.has(key)) return deny(400, `Unexpected field: ${key}`);
+  }
+  if (body.model !== IMAGE_MODEL) return deny(403, "Model not allowed");
+  if (!isCiphertext(body.prompt)) return deny(400, "prompt must be E2EE ciphertext");
+  if (body.n !== undefined && body.n !== 1) return deny(400, "n must be 1");
+  if (typeof body.size !== "string" || !IMAGE_SIZES.has(body.size)) return deny(400, "Unsupported size");
+  if (body.response_format !== "b64_json") return deny(400, "response_format must be b64_json");
   return ok;
 }

@@ -55,6 +55,12 @@ async function ready(): Promise<Sql> {
       updated_at timestamptz not null default now()
     )`;
     await db`create index if not exists advisor_purchases_wallet on advisor_purchases (wallet)`;
+    await db`create table if not exists safe_fee_scan (
+      safe text primary key,
+      realized_raw numeric not null default 0,
+      cursor text,
+      updated_at timestamptz not null default now()
+    )`;
   })().catch((error) => {
     schemaReady = null;
     throw error;
@@ -165,7 +171,7 @@ export async function unpricedUsage(limit = 50): Promise<string[]> {
   const db = await ready();
   const result = rows(
     await db`select inference_id from advisor_usage
-             where cost_usd is null and created_at < now() - interval '20 seconds'
+             where cost_usd is null and inference_id not like 'img:%' and created_at < now() - interval '20 seconds'
              order by created_at limit ${limit}`
   );
   return result.map((r) => String(r.inference_id));
@@ -234,3 +240,37 @@ export async function updatePurchaseStatus(depositAddress: string, status: strin
 }
 
 export { monthKey };
+
+/** Fees a Safe has paid to the treasury so far (USDC base units) and the last transaction scanned. */
+export async function getFeeScan(safe: string): Promise<{ realizedRaw: bigint; cursor: string | null; updatedAt: number } | null> {
+  const db = await ready();
+  const [row] = rows(await db`select realized_raw, cursor, updated_at from safe_fee_scan where safe = ${safe}`);
+  if (!row) return null;
+  return {
+    realizedRaw: BigInt(String(row.realized_raw).split(".")[0]),
+    cursor: row.cursor ? String(row.cursor) : null,
+    updatedAt: new Date(String(row.updated_at)).getTime(),
+  };
+}
+
+/**
+ * Add fees found after `fromCursor`, up to `toCursor`. Only applies when nobody advanced the cursor
+ * in the meantime, so two concurrent scans never count the same transaction twice.
+ */
+export async function advanceFeeScan(safe: string, fromCursor: string | null, toCursor: string | null, addRaw: bigint): Promise<boolean> {
+  const db = await ready();
+  if (fromCursor === null) {
+    const inserted = rows(
+      await db`insert into safe_fee_scan (safe, realized_raw, cursor) values (${safe}, ${addRaw.toString()}, ${toCursor})
+               on conflict (safe) do nothing returning safe`
+    );
+    if (inserted.length > 0) return true;
+  }
+  const updated = rows(
+    await db`update safe_fee_scan
+             set realized_raw = realized_raw + ${addRaw.toString()}, cursor = ${toCursor}, updated_at = now()
+             where safe = ${safe} and cursor is not distinct from ${fromCursor}
+             returning safe`
+  );
+  return updated.length > 0;
+}

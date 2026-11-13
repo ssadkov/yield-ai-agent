@@ -11,16 +11,24 @@ export const ADVISOR_FALLBACK_MODEL = "Qwen/Qwen3.8-27B";
 /** Refusals removed ("abliterated"). Open chat only, and only for wallets that unlocked it. */
 export const UNCENSORED_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated";
 
+/** Draws pictures from text in Open chat. Attested; $0.012 per picture (NEAR AI `/v1/models`, 2026-11-14). */
+export const IMAGE_MODEL = "black-forest-labs/FLUX.2-klein-4B";
+export const IMAGE_PRICE_USD = 0.012;
+
 /** Whitelist for the blind proxy. */
 export const ADVISOR_MODELS = [DEFAULT_ADVISOR_MODEL, ADVISOR_FALLBACK_MODEL, UNCENSORED_MODEL] as const;
 
 export type AdvisorModel = (typeof ADVISOR_MODELS)[number];
 
+/** Anything the browser verifies by attestation before sending: chat models and the image model. */
+export type AttestableModel = AdvisorModel | typeof IMAGE_MODEL;
+
 /** What Open chat offers. */
 export const OPEN_CHAT_MODEL_OPTIONS = [
   { id: DEFAULT_ADVISOR_MODEL, label: "Standard", hint: "Same model as the advisor" },
   { id: UNCENSORED_MODEL, label: "Uncensored", hint: "Fewer refusals · about 2.5× the cost" },
-] as const satisfies readonly { id: AdvisorModel; label: string; hint: string }[];
+  { id: IMAGE_MODEL, label: "Picture", hint: `Draws a picture from your words · $${IMAGE_PRICE_USD} each` },
+] as const satisfies readonly { id: AttestableModel; label: string; hint: string }[];
 
 export type OpenChatModel = (typeof OPEN_CHAT_MODEL_OPTIONS)[number]["id"];
 
@@ -42,6 +50,7 @@ function isOpenChatModel(value: string): value is OpenChatModel {
 
 /** Human name of a model, for the privacy badge and proof line. */
 export function advisorModelShortLabel(model: string): string {
+  if (model === IMAGE_MODEL) return "FLUX.2 klein (pictures)";
   return isAdvisorModel(model) ? MODEL_NAMES[model] : model;
 }
 

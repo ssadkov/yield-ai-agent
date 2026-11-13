@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AiPoolSnapshot } from "@/lib/advisor/aiPool";
+import { TOKENS_PER_USD, type AiPoolSnapshot } from "@/lib/advisor/aiPool";
+import { TickingNumber } from "@/components/agent/TickingNumber";
+
+const SECONDS_PER_MONTH = 30 * 24 * 3600;
+
+/** Start of the current UTC month, in ms. */
+function monthStart(): number {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+}
 
 const STORAGE_KEY = "agent.advisor.inferenceIds.v1";
 const MAX_STORED_IDS = 200;
@@ -99,9 +108,18 @@ export function AiPoolMeter({ className }: { className?: string } = {}) {
           : undefined
       }
     >
-      {pool
-        ? `Free AI comes from our NEAR staking pool: ${pool.stakedNear.toLocaleString("en-US", { maximumFractionDigits: 2 })} NEAR staked → ${usd(pool.usdPerMonth)}/month ≈ ${pool.requestsPerMonth.toLocaleString("en-US")} private requests`
-        : null}
+      {pool ? (
+        <>
+          {`Free AI comes from our NEAR staking pool: ${pool.stakedNear.toLocaleString("en-US", { maximumFractionDigits: 2 })} NEAR staked → ${usd(pool.usdPerMonth)}/month ≈ ${pool.requestsPerMonth.toLocaleString("en-US")} private requests. This month so far: `}
+          <TickingNumber
+            base={0}
+            perSecond={(pool.usdPerMonth / SECONDS_PER_MONTH) * TOKENS_PER_USD}
+            since={monthStart()}
+            className="font-medium text-foreground"
+          />
+          {" AI tokens"}
+        </>
+      ) : null}
       {pool && spent ? " · " : null}
       {spent ? `this browser: ${spent.requests} requests, ${usd(spent.usd)}` : null}
     </p>

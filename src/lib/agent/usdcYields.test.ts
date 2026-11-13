@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   STALE_MAX_MS,
   formatUsdcYieldsForPrompt,
+  limitToAppRoutes,
   loadUsdcYields,
   normalizeExponent,
   normalizeKamino,
@@ -75,7 +76,7 @@ test("Exponent: fixed APY with maturity, days left and projected payout", () => 
   assert.deepEqual(row.projectedAtMaturity, { depositUsdc: 100, receiveUsdc: 102.021973 });
   assert.equal(row.agentExecutable, true);
   assert.ok(row.caveats.some((c) => c.includes("2027-01-10 (61 days)")));
-  assert.ok(row.caveats.some((c) => c.includes("5% Yield AI profit fee; the pilot fee is 0%")));
+  assert.ok(row.caveats.some((c) => c.includes("assumes a 5% profit fee; the Safe program now takes 20%")));
 });
 
 test("Exponent: a matured market is listed but not executable", () => {
@@ -146,4 +147,14 @@ test("text format: rate, maturity, payout and degraded sources", async () => {
   assert.match(text, /Exponent PT-ONyc 10 Jan 2027 \[solana:exponent_onyc_10jan27\]: 12\.66% APY, fixed to 2027-01-10 \(61 days left\)/);
   assert.match(text, /100 USDC -> 102\.021973 USDC at maturity/);
   assert.match(text, /Source solana-kamino is unavailable: HTTP 404\. Its rates are unknown; do not guess them\./);
+});
+
+test("this app executes only Kamino; Exponent stays for comparison", () => {
+  const rows = [...normalizeKamino(KAMINO), ...normalizeExponent(EXPONENT, NOW)];
+  const limited = limitToAppRoutes({ rows, sources: [] } as unknown as Parameters<typeof limitToAppRoutes>[0]);
+  const byId = Object.fromEntries(limited.rows.map((r) => [r.id, r]));
+  assert.equal(byId["solana:kamino_usdc"].agentExecutable, true);
+  assert.equal(byId["solana:exponent_onyc_10jan27"].agentExecutable, false);
+  assert.ok(byId["solana:exponent_onyc_10jan27"].caveats.some((c) => c.includes("comparison")));
+  assert.equal(byId["solana:exponent_onyc_10jan27"].ratePct, rows.find((r) => r.id === "solana:exponent_onyc_10jan27")!.ratePct);
 });

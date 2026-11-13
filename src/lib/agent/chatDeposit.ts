@@ -1,6 +1,6 @@
 /**
  * 1-Click Solana → Solana Safe deposit used by the chat action card.
- * Same mainnet test limits as IntentsDepositPanel (1–5 USDC).
+ * Same demo limits as IntentsDepositPanel (1–101 USDC).
  */
 
 import { Connection, PublicKey, type Transaction } from "@solana/web3.js";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/agent/solanaSafe";
 
 export const CHAT_DEPOSIT_MIN_RAW = BigInt(1_000_000);
-export const CHAT_DEPOSIT_MAX_RAW = BigInt(5_000_000);
+export const CHAT_DEPOSIT_MAX_RAW = BigInt(101_000_000);
 const SLIPPAGE_BPS = 100;
 const STORAGE_KEY = "agent.intents.lastDeposit.v1";
 
@@ -98,7 +98,7 @@ export async function executeChatDeposit(args: ExecuteChatDepositArgs): Promise<
   const amountRaw = parseUsdc(amountInput);
   if (amountRaw === null) throw new Error("Enter a USDC amount, up to 6 decimals.");
   if (amountRaw < CHAT_DEPOSIT_MIN_RAW || amountRaw > CHAT_DEPOSIT_MAX_RAW) {
-    throw new Error("Test amounts only: 1 to 5 USDC.");
+    throw new Error("Demo limit: 1 to 101 USDC.");
   }
 
   onPhase?.("preparing");

@@ -5,6 +5,7 @@ import {
   CHAT_MODES,
   CHAT_MODE_HINT,
   CHAT_MODE_LABEL,
+  CHAT_MODE_MODEL,
   OPEN_CHAT_LOCKED_HINT,
   type ChatMode,
 } from "@/lib/advisor/modes";
@@ -48,6 +49,7 @@ export function AdvisorModePicker({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label="Chat mode"
+        title={`${CHAT_MODE_LABEL[value]} · ${CHAT_MODE_MODEL[value]}`}
         onClick={() => setOpen((current) => !current)}
         className="inline-flex h-8 max-w-[9rem] items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 text-[12.5px] font-medium tracking-tight text-foreground/85 transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
       >
@@ -118,6 +120,9 @@ export function AdvisorModePicker({
                     </span>
                     <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">
                       {locked ? OPEN_CHAT_LOCKED_HINT : CHAT_MODE_HINT[item]}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground/80">
+                      Model: {CHAT_MODE_MODEL[item]} · TEE
                     </span>
                   </span>
                 </button>

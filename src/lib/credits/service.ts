@@ -2,6 +2,7 @@
  * Server-side credit operations shared by the routes and the NEAR AI proxy.
  */
 import { computeBalance, type CreditBalance } from "./ledger.ts";
+import { INTENTS_ASSETS, SOLANA_USDC_ASSET } from "../agent/intentsAssets.ts";
 import { clientIp, guestKey, trialLimits, trialState, type TrialState } from "./trial.ts";
 import {
   trialUsageToday,
@@ -19,9 +20,9 @@ import { DEFAULT_ADVISOR_MODEL } from "../advisor/models.ts";
 import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
 
 /** The wallet's Safe, or null when it cannot be read right now. */
-async function safeOrNull(wallet: string): Promise<SafeSummary | null> {
+async function safeOrNull(wallet: string, scanFees = false): Promise<SafeSummary | null> {
   try {
-    return await loadSafeSummary(wallet);
+    return await loadSafeSummary(wallet, false, scanFees);
   } catch {
     return null;
   }
@@ -29,7 +30,7 @@ async function safeOrNull(wallet: string): Promise<SafeSummary | null> {
 
 /** The wallet's AI budget from its Safe yield; 0 when the Safe cannot be read right now. */
 export async function yieldBudgetUsd(wallet: string): Promise<number> {
-  return (await safeOrNull(wallet))?.accruedFeeUsdc ?? 0;
+  return (await safeOrNull(wallet))?.aiBudgetUsdc ?? 0;
 }
 
 /** USDC the Safe holds, idle or in Kamino. */
@@ -47,18 +48,10 @@ export async function openChatUnlocked(wallet: string): Promise<boolean> {
 }
 
 export const ONE_CLICK = "https://1click.chaindefuser.com/v0";
-const SOLANA_USDC = "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near";
+const SOLANA_USDC = SOLANA_USDC_ASSET;
 
-/** What a buyer may pay with. Solana assets are sent by the connected wallet; others by hand. */
-export const PAYMENT_ASSETS = [
-  { id: SOLANA_USDC, label: "USDC on Solana", chain: "solana", symbol: "USDC", decimals: 6 },
-  { id: "nep141:sol.omft.near", label: "SOL", chain: "solana", symbol: "SOL", decimals: 9 },
-  { id: "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near", label: "USDT on Tron", chain: "tron", symbol: "USDT", decimals: 6 },
-  { id: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near", label: "USDC on Base", chain: "base", symbol: "USDC", decimals: 6 },
-  { id: "nep141:base.omft.near", label: "ETH on Base", chain: "base", symbol: "ETH", decimals: 18 },
-  { id: "nep141:wrap.near", label: "NEAR", chain: "near", symbol: "NEAR", decimals: 24 },
-  { id: "nep141:btc.omft.near", label: "BTC", chain: "btc", symbol: "BTC", decimals: 8 },
-] as const;
+/** What a buyer may pay with (shared with Safe deposits). Solana assets are sent by the connected wallet; others by hand. */
+export const PAYMENT_ASSETS = INTENTS_ASSETS;
 
 export function freeMonthlyUsd(): number {
   const value = Number(process.env.ADVISOR_FREE_USD_PER_MONTH ?? "0.05");
@@ -121,7 +114,7 @@ async function balanceFrom(wallet: string, safe: SafeSummary | null): Promise<Cr
   const [purchased, spend] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet)]);
   return computeBalance({
     freeMonthlyUsd: freeMonthlyUsd(),
-    yieldUsd: safe?.accruedFeeUsdc ?? 0,
+    yieldUsd: safe?.aiBudgetUsdc ?? 0,
     purchasedUsd: purchased,
     spendByMonth: spend,
     now: new Date(),
@@ -169,7 +162,7 @@ export async function walletSummary(wallet: string): Promise<{
 }> {
   // Billed costs first, so usage totals and the balance read the same numbers.
   await reconcileCosts().catch(() => 0);
-  const safe = await safeOrNull(wallet);
+  const safe = await safeOrNull(wallet, true);
   const [balance, purchases, usage, price] = await Promise.all([
     balanceFrom(wallet, safe),
     listPurchases(wallet),

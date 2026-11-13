@@ -3,7 +3,7 @@
  *
  * Sources, in the order they are spent:
  * 1. a monthly free allowance funded by the staked AI pool;
- * 2. the wallet's own Safe yield: the performance fee the Safe program has accrued on its Kamino
+ * 2. the wallet's own Safe yield: the performance fee the Safe program has taken (realized) and accrued on its Kamino
  *    gain (collected on exit, so it is granted before it is realized);
  * 3. credits bought through NEAR Intents 1-Click.
  * Spending is the real NEAR AI cost of each request (or an estimate until billing reports it).

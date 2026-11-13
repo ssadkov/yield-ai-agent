@@ -12,7 +12,7 @@
 | Что | Где | Как вызвать из чата |
 |---|---|---|
 | Сводка сейфа: кошелёк, свободный USDC, Kamino по текущей цене доли, прибыль, начисленная комиссия | `GET /agent/api/safe-summary?owner=`, `src/lib/agent/safeSummary*.ts` | инструмент `get_safe_summary` → компактный текст в результат инструмента |
-| Создать сейф, депозит из кошелька в сейф или сразу в Kamino, свободный USDC → Kamino, вывод свободного USDC, выход из Kamino (redeem → return, две подписи) | `src/components/agent/SafePanel.tsx`, планы и проверка — `src/lib/agent/safePlans.ts` (`request*Plan`, `signAndSendPlan`, `checkPlanTransaction`) | `propose_plan` / `show_action_card` → карточка вызывает те же `request*Plan` + `signAndSendPlan`. Транзакцию строит Solana Safe API, браузер проверяет её до подписи — не обходить |
+| Создать сейф, депозит из кошелька в сейф или сразу в Kamino, свободный USDC → Kamino, вывод свободного USDC, выход из Kamino (redeem → return, две подписи) | `src/components/agent/EarnPanel.tsx` (карточка Earn, окна Deposit / Withdraw), планы и проверка — `src/lib/agent/safePlans.ts` (`request*Plan`, `signAndSendPlan`, `checkPlanTransaction`) | `propose_plan` / `show_action_card` → карточка вызывает те же `request*Plan` + `signAndSendPlan`. Транзакцию строит Solana Safe API, браузер проверяет её до подписи — не обходить |
 | Депозит через NEAR Intents 1-Click | `IntentsDepositPanel.tsx`, `chatDeposit.ts` | уже есть в карточке `ActionCard` |
 | AI-кредиты: вход подписью, бесплатный лимит пула, бюджет из дохода сейфа (комиссия программы с прибыли Kamino), покупка любым токеном | `src/lib/credits/*`, `/agent/api/session`, `/agent/api/credits*`, `CreditsPanel.tsx` | баланс показывать в чате; при 402 от прокси — кнопка «Top up» |
 | Подпись каждого ответа и панель «что ушло из браузера» | `verifyAnswer` в `nearProxy.ts`, `AnswerProofLine.tsx` | уже под каждым ответом |
@@ -219,3 +219,10 @@ PR #411 переносится почти как есть: `streamText` с `tool
 - Stateless Responses: https://docs.near.ai/cloud/guides/stateless-responses.md
 - Модели и цены: `GET https://cloud-api.near.ai/v1/models`, сервисы: `GET https://cloud-api.near.ai/v1/services`
 - Полный бриф репозитория: [`AGENTS.md`](../AGENTS.md), разделы 4, 4a, 4b
+
+## Картинки под E2EE (проверено 2026-11-13, `scripts/near-ai-image-probe.mjs`)
+
+- **Чтение картинок.** Сообщение с частями `[{type:"text"}, {type:"image_url", image_url:{url:"data:image/png;base64,…"}}]` шифруется целиком: `content = encrypt(JSON.stringify(parts))` — так делает `@nearai/inference-sdk`. Картинка не идёт открытым текстом. Ответили верно: `z-ai/glm-5.3-flash` (64×64 PNG = 16 image-токенов) и `Qwen/Qwen3-VL-30B-A3B-Instruct`. В чате: скрепка, вставка и перетаскивание (до 3 картинок, в браузере сжимаются до 1024 px JPEG); прокси принимает тело до 3.5 МБ; повторно отправляется только последнее сообщение с картинками, в сохранённой истории картинок нет.
+- **Генерация.** `POST /v1/images/generations` с теми же E2EE-заголовками и `prompt = encrypt(...)` для `black-forest-labs/FLUX.2-klein-4B` (есть аттестация): `b64_json` и `revised_prompt` приходят hex-шифротекстом, после расшифровки — base64 JPEG. Открыто остаются `url: null` и `file_path` (путь к файлу внутри TEE-контейнера, например `/sgl-workspace/sglang/outputs/<uuid>.jpg`) — сколько файл там хранится, неизвестно.
+- Не проверено: подпись ответа (`/v1/signature/{id}`) для картинок и цена FLUX за картинку.
+- **Генерация в чате (2026-11-14):** Open chat → модель «Picture» (`FLUX.2-klein-4B`). Прокси пропускает `POST v1/images/generations` только с зашифрованным `prompt`, `n: 1`, размером 512/1024 и `b64_json`; нужны вход кошельком, открытый Open chat и баланс ≥ $0.012. NEAR AI не даёт billing-id для картинок (только `x-request-id`, его `/v1/billing/costs` не оценивает), поэтому в учёт сразу пишется цена из `/v1/models` — $0.012 за картинку. Подписи ответа для картинок нет.

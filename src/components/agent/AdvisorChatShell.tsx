@@ -17,8 +17,10 @@ import {
   type UiMessage,
 } from "@/lib/advisor/runTurn";
 import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
+import { setAdvisorWallet } from "@/lib/advisor/tools";
 import {
   DEFAULT_ADVISOR_MODEL,
+  IMAGE_MODEL,
   advisorModelShortLabel,
   loadPreferredOpenChatModel,
   savePreferredOpenChatModel,
@@ -39,6 +41,8 @@ import { AdvisorModePicker } from "@/components/agent/AdvisorModePicker";
 import { AdvisorModelPicker } from "@/components/agent/AdvisorModelPicker";
 import { rememberInferenceIds } from "@/components/agent/AiPoolMeter";
 import { CreditsPanel } from "@/components/agent/CreditsPanel";
+import { imageFileToDataUrl } from "@/lib/advisor/imageFile";
+import { MAX_IMAGES_PER_MESSAGE } from "@/lib/advisor/images";
 import type { CreditsState } from "@/lib/credits/client";
 
 const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
@@ -204,6 +208,9 @@ const EMPTY_HISTORIES: Histories = { advisor: [], free: [] };
 
 export function AdvisorChatShell() {
   const [input, setInput] = useState("");
+  /** Pictures waiting to be sent with the next message, as downscaled JPEG data URLs. */
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [chosenMode, setMode] = useState<ChatMode>(DEFAULT_CHAT_MODE);
   const [credits, setCredits] = useState<{ state: CreditsState | null; wallet: string | null }>({
     state: null,
@@ -228,10 +235,23 @@ export function AdvisorChatShell() {
     credits.state?.enabled === false ||
     Boolean(credits.wallet && credits.state?.signedIn && credits.state.wallet === credits.wallet && credits.state.openChat);
   const mode: ChatMode = chosenMode === "free" && !openChatUnlocked ? "advisor" : chosenMode;
+  /** Open chat with the image model: the message is a picture prompt. */
+  const pictureMode = mode === "free" && preferredModel === IMAGE_MODEL;
+
+  // The page's ambient colour follows the mode, so a switch is visible at a glance (globals.css).
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.chatMode = pictureMode ? "picture" : mode;
+    return () => {
+      delete root.dataset.chatMode;
+    };
+  }, [mode, pictureMode]);
   const onCreditsState = useCallback(
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []
   );
+  // The advisor's get_my_account tool reads the connected wallet's Safe.
+  useEffect(() => setAdvisorWallet(credits.wallet), [credits.wallet]);
 
   const messages = histories[mode];
 
@@ -316,14 +336,35 @@ export function AdvisorChatShell() {
     setAttestation(null);
   };
 
+  const addImages = async (files: File[]) => {
+    if (pictureMode) return setError("Picture mode draws from text; switch the model to attach pictures.");
+    const room = MAX_IMAGES_PER_MESSAGE - attachments.length;
+    const picked = files.filter((f) => f.type.startsWith("image/"));
+    if (picked.length === 0) return;
+    if (room <= 0) return setError(`Up to ${MAX_IMAGES_PER_MESSAGE} pictures per message.`);
+    setError(null);
+    const added: string[] = [];
+    for (const file of picked.slice(0, room)) {
+      try {
+        added.push(await imageFileToDataUrl(file));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Cannot read this picture.");
+      }
+    }
+    if (picked.length > room) setError(`Up to ${MAX_IMAGES_PER_MESSAGE} pictures per message.`);
+    setAttachments((prev) => [...prev, ...added].slice(0, MAX_IMAGES_PER_MESSAGE));
+  };
+
   const send = async (raw: string) => {
     const text = raw.trim();
-    if (!text || busy) return;
+    const images = attachments;
+    if ((!text && images.length === 0) || busy) return;
     const activeMode = mode;
     setError(null);
     setBusy(true);
     setInput("");
-    const userMessage = makeUiMessage("user", text);
+    setAttachments([]);
+    const userMessage = { ...makeUiMessage("user", text), ...(images.length > 0 ? { images } : {}) };
     const priorMessages = histories[activeMode];
     setHistories((prev) => ({ ...prev, [activeMode]: [...prev[activeMode], userMessage] }));
 
@@ -343,6 +384,7 @@ export function AdvisorChatShell() {
       const result = await runAdvisorTurn({
         session,
         userText: text,
+        images,
         onStatus: (next) => setStatus(next.replace(/…$/, "")),
         onAssistantDelta: (delta) => {
           patchActive((list) =>
@@ -352,6 +394,8 @@ export function AdvisorChatShell() {
       });
       setModel(result.model);
       rememberInferenceIds(result.inferenceIds);
+      // Pictures have no inference id; still refresh the balance they were charged to.
+      if (result.images?.length) window.dispatchEvent(new Event("agent-inference-ids"));
       patchActive((list) =>
         list.map((message) =>
           message.id === nextStreamId
@@ -360,10 +404,13 @@ export function AdvisorChatShell() {
                 content: result.assistantText,
                 plan: result.plan ?? undefined,
                 actionCard: result.actionCard ?? undefined,
+                ...(result.images?.length ? { images: result.images } : {}),
               }
             : message
         )
       );
+      // Pictures carry no signed completion to check; their privacy rests on the attestation and E2EE.
+      if (result.evidence.length === 0) return;
       setChecking((prev) => new Set(prev).add(nextStreamId));
       void verifyAnswer(session.attested, result.evidence).then((proof) => {
         setChecking((prev) => {
@@ -456,7 +503,7 @@ export function AdvisorChatShell() {
         ) : null}
 
         {messages.map((message) => {
-          if (!message.content && !message.actionCard && message.role === "assistant") return null;
+          if (!message.content && !message.actionCard && !message.images?.length && message.role === "assistant") return null;
           const isUser = message.role === "user";
           return (
             <div
@@ -472,9 +519,32 @@ export function AdvisorChatShell() {
                 ].join(" ")}
               >
                 {isUser ? (
-                  message.content
+                  <>
+                    {message.images?.length ? (
+                      <div className={["flex flex-wrap gap-1.5", message.content ? "mb-2" : ""].join(" ")}>
+                        {message.images.map((url, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element -- local data URL
+                          <img key={i} src={url} alt="" className="max-h-48 max-w-full rounded-xl object-cover" />
+                        ))}
+                      </div>
+                    ) : null}
+                    {message.content}
+                  </>
                 ) : (
                   <div className="space-y-3">
+                    {message.images?.length ? (
+                      <div className="space-y-1.5">
+                        {message.images.map((url, i) => (
+                          <a key={i} href={url} download={`yield-ai-picture-${i + 1}.jpg`} title="Download">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- decrypted in this browser */}
+                            <img src={url} alt="Generated picture" className="w-full max-w-md rounded-2xl" />
+                          </a>
+                        ))}
+                        <p className="text-[12px] text-emerald-700 dark:text-emerald-300">
+                          Drawn by FLUX.2 inside a verified TEE · encrypted to this browser · not saved in history
+                        </p>
+                      </div>
+                    ) : null}
                     {message.content ? <ChatMarkdown content={message.content} /> : null}
                     {message.plan ? (
                       <div className="rounded-2xl border border-border/60 bg-background/50 px-3 py-2.5 text-[13px]">
@@ -522,10 +592,44 @@ export function AdvisorChatShell() {
           event.preventDefault();
           void send(input);
         }}
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          const files = Array.from(event.dataTransfer.files);
+          if (files.length === 0) return;
+          event.preventDefault();
+          void addImages(files);
+        }}
       >
         <div className="relative rounded-[20px] border border-border/80 bg-muted/30 p-1.5 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 focus-within:border-foreground/25 focus-within:bg-background focus-within:shadow-md sm:rounded-[22px] sm:p-2">
+          {attachments.length > 0 ? (
+            <div className="flex flex-wrap gap-2 px-2 pt-1.5">
+              {attachments.map((url, i) => (
+                <div key={i} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- local data URL */}
+                  <img src={url} alt="" className="h-16 w-16 rounded-xl border border-border/70 object-cover" />
+                  <button
+                    type="button"
+                    aria-label="Remove picture"
+                    onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                    className="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[12px] text-background"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <textarea
             value={input}
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData.files);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                event.preventDefault();
+                void addImages(files);
+              }
+            }}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -533,13 +637,43 @@ export function AdvisorChatShell() {
                 void send(input);
               }
             }}
-            placeholder={CHAT_MODE_PLACEHOLDER[mode]}
+            placeholder={pictureMode ? "Describe a picture…" : CHAT_MODE_PLACEHOLDER[mode]}
             rows={2}
             disabled={busy}
             className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px]"
           />
           <div className="flex items-center justify-between gap-2 px-1.5 pb-0.5 pt-0.5 sm:px-2">
             <div className="flex min-w-0 items-center gap-1.5">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  void addImages(files);
+                }}
+              />
+              <button
+                type="button"
+                disabled={busy || pictureMode || attachments.length >= MAX_IMAGES_PER_MESSAGE}
+                onClick={() => fileRef.current?.click()}
+                aria-label="Attach a picture"
+                title="Attach a picture (encrypted like your text)"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/80 text-foreground/80 hover:bg-muted disabled:opacity-40"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
+                  <path
+                    d="M21 12.5l-8.3 8.3a5 5 0 0 1-7.1-7.1l8.6-8.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a2 2 0 0 1-2.8-2.8l7.9-7.9"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
               <AdvisorModePicker
                 value={mode}
                 disabled={busy}
@@ -562,7 +696,7 @@ export function AdvisorChatShell() {
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim()}
+                disabled={!input.trim() && attachments.length === 0}
                 aria-label="Send message"
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-40"
               >

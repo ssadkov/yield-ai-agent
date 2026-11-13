@@ -64,40 +64,59 @@ const EXPECTED: Record<PlanKind, SafeInstruction[]> = {
   kamino_redeem: ["kamino_withdraw"],
 };
 
+const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+/** Share mint of the Kamino USDC kVault `91b1op…` (SPL Token), read from a live plan 2026-11-13. */
+export const KAMINO_SHARES_MINT = new PublicKey("B9t9wg8r39Lxm2D9Gmqn2rJ5pVQQwjtGBfSsHAXSEnVe");
+
+/** The Safe's Kamino share account. */
+export function kaminoSharesAta(safe: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [safe.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), KAMINO_SHARES_MINT.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  )[0];
+}
+
+/** A token account a plan may create: its address, its holder, and the mint when it must be checked directly. */
+type AllowedAccount = { ata: PublicKey; holder: PublicKey; mint: PublicKey | null };
+
 /**
- * The only non-Safe instruction a plan may carry: idempotently creating a USDC account, paid by
- * the owner, for exactly one expected holder — the Safe before a deposit, the owner before a
- * withdrawal, the fee treasury before a Kamino exit. Anything else from the ATA program is refused.
+ * The only non-Safe instruction a plan may carry: idempotently creating one expected token
+ * account, paid by the owner — the Safe's USDC account before a deposit, the owner's before a
+ * withdrawal, the fee treasury's before a Kamino exit, and the Safe's Kamino share account before
+ * its first Kamino deposit. Anything else from the ATA program is refused.
  */
-function checkUsdcAccountCreation(
+function checkAccountCreation(
   ix: { accountKeyIndexes: number[]; data: Uint8Array },
   keys: PublicKey[],
   owner: PublicKey,
-  holder: PublicKey
+  allowed: AllowedAccount[]
 ): void {
-  const at = (i: number) => {
-    const key = keys[ix.accountKeyIndexes[i]];
-    if (!key) throw new PlanCheckError("Account creation uses a lookup-table account.");
-    return key;
-  };
+  const at = (i: number) => keys[ix.accountKeyIndexes[i]] ?? null;
   const isCreateIdempotent = ix.data.length === 1 && ix.data[0] === 1;
-  if (
-    !isCreateIdempotent ||
-    !at(0).equals(owner) ||
-    !at(1).equals(usdcAta(holder)) ||
-    !at(2).equals(holder) ||
-    !at(3).equals(USDC_MINT)
-  ) {
-    throw new PlanCheckError("The plan creates a token account other than the expected USDC account.");
+  const payer = at(0);
+  const ata = at(1);
+  const holder = at(2);
+  const match = allowed.find((a) => ata?.equals(a.ata) && holder?.equals(a.holder));
+  // The ATA address is derived from holder, token program and mint, so a matching address already
+  // pins the mint. The API may load the mint from its lookup table; when it is a static key, check it too.
+  const mint = at(3);
+  const mintOk = match && (match.mint === null || mint === null || mint.equals(match.mint));
+  if (!isCreateIdempotent || !payer?.equals(owner) || !match || !mintOk) {
+    throw new PlanCheckError("The plan creates a token account other than the expected one.");
   }
 }
 
-/** Whose USDC account a plan of this kind may create, if any. */
-function allowedAccountHolder(kind: PlanKind, owner: PublicKey, treasury?: PublicKey): PublicKey | null {
-  if (kind === "deposit") return safeAddress(owner);
-  if (kind === "withdraw") return owner;
-  if (kind === "kamino_redeem") return treasury ?? null;
-  return null;
+/** Which token accounts a plan of this kind may create. */
+function allowedAccounts(kind: PlanKind, owner: PublicKey, treasury?: PublicKey): AllowedAccount[] {
+  const safe = safeAddress(owner);
+  const usdc = (holder: PublicKey): AllowedAccount => ({ ata: usdcAta(holder), holder, mint: USDC_MINT });
+  if (kind === "deposit") return [usdc(safe)];
+  if (kind === "withdraw") return [usdc(owner)];
+  if (kind === "kamino_redeem") return treasury ? [usdc(treasury)] : [];
+  if (kind === "kamino_deposit" || kind === "kamino_deposit_from_wallet") {
+    return [{ ata: kaminoSharesAta(safe), holder: safe, mint: null }];
+  }
+  return [];
 }
 
 export type PlanStep = {
@@ -163,9 +182,9 @@ export function checkPlanTransaction(
     if (!program) throw new PlanCheckError("Instruction program is not a static account.");
     if (program.equals(ComputeBudgetProgram.programId)) continue;
     if (program.equals(ASSOCIATED_TOKEN_PROGRAM_ID)) {
-      const holder = allowedAccountHolder(expected.kind, expected.owner, expected.treasury);
-      if (!holder) throw new PlanCheckError("This plan must not create token accounts.");
-      checkUsdcAccountCreation(ix, keys, expected.owner, holder);
+      const allowed = allowedAccounts(expected.kind, expected.owner, expected.treasury);
+      if (allowed.length === 0) throw new PlanCheckError("This plan must not create token accounts.");
+      checkAccountCreation(ix, keys, expected.owner, allowed);
       continue;
     }
     if (!program.equals(SAFE_PROGRAM_ID)) {
@@ -207,12 +226,21 @@ export function checkPlanTransaction(
 }
 
 async function postPlan(path: string, body: unknown): Promise<SafePlan> {
-  const response = await fetch(`${API}/${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API}/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new SafeApiError("The Safe API did not answer in 45 s. Try again.", "TIMEOUT");
+    }
+    throw error;
+  }
   const json = (await response.json().catch(() => null)) as
     | (SafePlan & { error?: { message?: string } | string })
     | null;
@@ -238,7 +266,17 @@ export class SafeApiError extends Error {
 
 const owner = (address: PublicKey) => ({ type: "solana", address: address.toBase58() });
 
-export function requestCreationPlan(address: PublicKey, initialDepositUsdc?: string): Promise<SafePlan> {
+/** Demo ceiling for money coming in from the wallet while the program has one admin key (until Squads). */
+export const DEMO_MAX_DEPOSIT_USDC = 101;
+
+function assertDemoCap(amountUsdc: string | undefined) {
+  if (amountUsdc !== undefined && Number(amountUsdc) > DEMO_MAX_DEPOSIT_USDC) {
+    throw new Error(`Demo limit: up to ${DEMO_MAX_DEPOSIT_USDC} USDC per deposit.`);
+  }
+}
+
+export async function requestCreationPlan(address: PublicKey, initialDepositUsdc?: string): Promise<SafePlan> {
+  assertDemoCap(initialDepositUsdc);
   return postPlan("safes/creation-plan", {
     owner: owner(address),
     cluster: "mainnet",
@@ -247,16 +285,18 @@ export function requestCreationPlan(address: PublicKey, initialDepositUsdc?: str
 }
 
 /** USDC from the owner's wallet straight into the Safe. */
-export function requestDepositPlan(address: PublicKey, amountUsdc: string): Promise<SafePlan> {
+export async function requestDepositPlan(address: PublicKey, amountUsdc: string): Promise<SafePlan> {
+  assertDemoCap(amountUsdc);
   return postPlan("deposits/plan", { owner: owner(address), cluster: "mainnet", amount: amountUsdc });
 }
 
 /** Into the Kamino USDC vault from the Safe's idle USDC, or straight from the wallet in one transaction. */
-export function requestKaminoDepositPlan(
+export async function requestKaminoDepositPlan(
   address: PublicKey,
   amountUsdc: string,
   source: "safe" | "wallet" = "safe"
 ): Promise<SafePlan> {
+  if (source === "wallet") assertDemoCap(amountUsdc);
   return postPlan("protocols/kamino/deposits/plan", {
     owner: owner(address),
     cluster: "mainnet",
@@ -298,6 +338,22 @@ export async function readSafeTreasury(connection: Connection): Promise<PublicKe
   return new PublicKey(info.data.subarray(40, 72));
 }
 
+/** Whether a sent transaction is on chain: polls its status for up to ~30 s. */
+async function signatureLanded(connection: Connection, signature: string): Promise<"ok" | "failed" | "unknown"> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      const { value } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+      const status = value[0];
+      if (status?.err) return "failed";
+      if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") return "ok";
+    } catch {
+      /* try again */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+  return "unknown";
+}
+
 /** Check the plan, have the wallet sign and send it, and wait for confirmation. */
 export async function signAndSendPlan(options: {
   plan: SafePlan;
@@ -307,19 +363,38 @@ export async function signAndSendPlan(options: {
   treasury?: PublicKey;
   connection: Connection;
   sendTransaction: (tx: VersionedTransaction, connection: Connection) => Promise<string>;
+  /** "wallet" right before the wallet is asked to sign, "confirming" once it sent the transaction. */
+  onStage?: (stage: "wallet" | "confirming") => void;
 }): Promise<string> {
-  const { plan, owner: wallet, kind, amountRaw, treasury, connection, sendTransaction } = options;
+  const { plan, owner: wallet, kind, amountRaw, treasury, connection, sendTransaction, onStage } = options;
   if (plan.status !== "ready" || plan.steps.length !== 1) {
     throw new Error(plan.status === "already_exists" ? "Your Safe already exists." : "The Safe API returned no transaction.");
   }
   const tx = checkPlanTransaction(plan.steps[0].transaction, { owner: wallet, kind, amountRaw, treasury });
+  onStage?.("wallet");
   const signature = await sendTransaction(tx, connection);
+  onStage?.("confirming");
   if (plan.blockhash && plan.lastValidBlockHeight) {
-    const result = await connection.confirmTransaction(
-      { signature, blockhash: plan.blockhash, lastValidBlockHeight: plan.lastValidBlockHeight },
-      "confirmed"
-    );
-    if (result.value.err) throw new Error(`Transaction failed: ${JSON.stringify(result.value.err)}`);
+    let failure: unknown = null;
+    try {
+      const result = await connection.confirmTransaction(
+        { signature, blockhash: plan.blockhash, lastValidBlockHeight: plan.lastValidBlockHeight },
+        "confirmed"
+      );
+      if (result.value.err) throw new Error(`Transaction failed: ${JSON.stringify(result.value.err)}`);
+    } catch (error) {
+      failure = error;
+    }
+    if (failure) {
+      // The wait can fail (RPC hiccup, expired block height) after the transaction already landed:
+      // ask the chain directly before reporting an error.
+      const landed = await signatureLanded(connection, signature);
+      if (landed === "failed" || landed === "unknown") {
+        throw failure instanceof Error && landed === "unknown"
+          ? new Error(`${failure.message} Check the transaction: https://solscan.io/tx/${signature}`)
+          : failure;
+      }
+    }
   }
   return signature;
 }

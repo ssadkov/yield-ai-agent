@@ -5,7 +5,7 @@ import {
   encryptToModel,
   type ClientKeys,
 } from "@/lib/advisor/e2ee";
-import { ADVISOR_MODELS, type AdvisorModel } from "@/lib/advisor/models";
+import { ADVISOR_MODELS, IMAGE_MODEL, type AttestableModel } from "@/lib/advisor/models";
 import type { VerifiedModelAttestation } from "@nearai/inference-sdk";
 import { sessionHeaders } from "@/lib/credits/client";
 import { parseUsage, type TokenUsage } from "@/lib/advisor/usage";
@@ -24,7 +24,7 @@ export type AttestationSummary = {
 };
 
 export type AttestedModel = {
-  model: AdvisorModel;
+  model: AttestableModel;
   modelPubKeyHex: string;
   nonce: string;
   attestation: AttestationSummary;
@@ -32,8 +32,12 @@ export type AttestedModel = {
   verifiedAttestations: readonly VerifiedModelAttestation[];
 };
 
+import { latestImagesOnly, type ContentPart } from "./images.ts";
+export type { ContentPart };
+
 export type ChatMessage =
   | { role: "system" | "user" | "assistant"; content: string }
+  | { role: "user"; content: ContentPart[] }
   | {
       role: "assistant";
       content: string | null;
@@ -65,7 +69,7 @@ async function proxyFetch(path: string, init?: RequestInit): Promise<Response> {
  * agree on the key; otherwise we try the next candidate and never send anything to this one.
  * The SDK is loaded on first use so it stays out of the page's initial bundle.
  */
-export async function pickAttestedModel(candidates: readonly AdvisorModel[]): Promise<AttestedModel> {
+export async function pickAttestedModel(candidates: readonly AttestableModel[]): Promise<AttestedModel> {
   const errors: string[] = [];
   for (const model of candidates) {
     try {
@@ -78,8 +82,8 @@ export async function pickAttestedModel(candidates: readonly AdvisorModel[]): Pr
   throw new Error(errors[0] ?? "No model to verify");
 }
 
-async function verifyModel(preferred: AdvisorModel): Promise<AttestedModel> {
-  if (!ADVISOR_MODELS.includes(preferred)) {
+async function verifyModel(preferred: AttestableModel): Promise<AttestedModel> {
+  if (preferred !== IMAGE_MODEL && !(ADVISOR_MODELS as readonly string[]).includes(preferred)) {
     throw new Error(`Model not allowed: ${preferred}`);
   }
   const { AttestationClient, verifyModelAttestation } = await import("@nearai/inference-sdk");
@@ -142,7 +146,7 @@ async function encryptTools(tools: ToolDef[], modelPub: string) {
 
 async function encryptMessages(messages: ChatMessage[], modelPub: string): Promise<unknown[]> {
   const out: unknown[] = [];
-  for (const message of messages) {
+  for (const message of latestImagesOnly(messages)) {
     if (message.role === "tool") {
       out.push({
         role: "tool",
@@ -168,9 +172,12 @@ async function encryptMessages(messages: ChatMessage[], modelPub: string): Promi
       });
       continue;
     }
+    // Text and image parts are encrypted together as one JSON string, as @nearai/inference-sdk does:
+    // the picture never leaves the browser in clear.
+    const content = Array.isArray(message.content) ? JSON.stringify(message.content) : message.content ?? "";
     out.push({
       role: message.role,
-      content: await encryptToModel(message.content ?? "", modelPub),
+      content: await encryptToModel(content, modelPub),
     });
   }
   return out;
@@ -384,4 +391,61 @@ export async function verifyAnswer(attested: AttestedModel, evidence: Completion
   } catch (error) {
     return { ...base, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** What the proxy says when it refuses (sign in, credits, unlock): written for people. */
+async function refusalOrHttp(response: Response, what: string): Promise<Error> {
+  const detail = await response.text().catch(() => "");
+  try {
+    const refusal = (JSON.parse(detail) as { error?: unknown }).error;
+    if (typeof refusal === "string" && refusal) return new Error(refusal);
+  } catch {
+    /* not JSON */
+  }
+  return new Error(`${what} HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`);
+}
+
+/**
+ * One picture from the attested image model, end to end encrypted: the prompt is encrypted here to
+ * the model's key, and the picture (and the model's revised prompt) come back encrypted to this
+ * browser's key. Returns a data URL. Checked against NEAR AI on 2026-11-13 (scripts/near-ai-image-probe.mjs).
+ */
+export async function generateImage(options: {
+  attested: AttestedModel;
+  keys: ClientKeys;
+  prompt: string;
+}): Promise<{ dataUrl: string; revisedPrompt: string | null }> {
+  const { attested, keys, prompt } = options;
+  const response = await proxyFetch("v1/images/generations", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-Signing-Algo": "ed25519",
+      "X-Client-Pub-Key": clientPubHex(keys),
+      "X-Model-Pub-Key": attested.modelPubKeyHex,
+      "X-Encryption-Version": "2",
+      "X-Encrypt-All-Fields": "true",
+    },
+    body: JSON.stringify({
+      model: attested.model,
+      prompt: await encryptToModel(prompt, attested.modelPubKeyHex),
+      size: "1024x1024",
+      n: 1,
+      response_format: "b64_json",
+    }),
+  });
+  if (!response.ok) throw await refusalOrHttp(response, "Picture");
+  const json = (await response.json()) as { data?: { b64_json?: string; revised_prompt?: string }[] };
+  const item = json.data?.[0];
+  if (!item?.b64_json) throw new Error("The image model returned no picture.");
+  let base64: string;
+  try {
+    base64 = await decryptFromModel(item.b64_json, keys.xSecret);
+  } catch {
+    throw new Error("The picture could not be decrypted with this browser's key; nothing is shown.");
+  }
+  const mime = base64.startsWith("iVBOR") ? "image/png" : base64.startsWith("UklGR") ? "image/webp" : "image/jpeg";
+  let revisedPrompt: string | null = null;
+  if (item.revised_prompt) revisedPrompt = await decryptFromModel(item.revised_prompt, keys.xSecret).catch(() => null);
+  return { dataUrl: `data:${mime};base64,${base64}`, revisedPrompt };
 }

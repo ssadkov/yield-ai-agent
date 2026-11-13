@@ -3,7 +3,7 @@
 import { SessionPanel } from "@/components/agent/SessionPanel";
 import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
 import { SHOW_APTOS } from "@/lib/agent/features";
-import { SafePanel } from "@/components/agent/SafePanel";
+import { EarnPanel } from "@/components/agent/EarnPanel";
 
 function truncateAddress(address: string): string {
   if (address.length <= 12) return address;
@@ -82,12 +82,11 @@ export function WalletSidePanel({
 
       {!connected && !showSkeleton ? (
         <section className="panel-glass overflow-hidden rounded-2xl px-4 py-5">
-          <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">&gt;&gt; wallet</p>
           <h3 className="mt-1 text-base font-semibold tracking-tight">Connect to continue</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
             {SHOW_APTOS
               ? "Phantom derives an Aptos account for this host. Then you can deposit USDC and talk to the advisor with your Safe in context."
-              : "Connect a Solana wallet to deposit USDC into your Solana Safe and talk to the advisor with your Safe in context."}
+              : "Connect a Solana wallet to earn on USDC. The advisor sees your balance and proposes; you sign."}
           </p>
           <button
             type="button"
@@ -110,7 +109,8 @@ export function WalletSidePanel({
         </section>
       ) : null}
 
-      {connected ? (
+      {/* The wallet itself is in the header; with Aptos on, its session card comes back. */}
+      {SHOW_APTOS && connected ? (
         <section className="panel-glass overflow-hidden rounded-2xl px-4 py-3">
           <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">&gt;&gt; session</p>
           <h3 className="mt-1 text-sm font-semibold">Connected</h3>
@@ -123,7 +123,7 @@ export function WalletSidePanel({
                 <dd className="mt-0.5 font-mono text-sm text-foreground">{truncateAddress(solanaAddress)}</dd>
               </div>
             ) : null}
-            {SHOW_APTOS && aptosAddress ? (
+            {aptosAddress ? (
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   Aptos · {aptosKind}
@@ -137,13 +137,10 @@ export function WalletSidePanel({
 
       {SHOW_APTOS && connected ? <SessionPanel aptosAddress={aptosAddress} /> : null}
 
-      {connected && solanaAddress ? <SafePanel /> : null}
+      {connected && solanaAddress ? <EarnPanel /> : null}
 
-      {showDeposit ? (
-        <IntentsDepositPanel
-          aptosAddress={SHOW_APTOS ? aptosAddress : null}
-          aptosIsDerived={SHOW_APTOS && aptosIsDerived}
-        />
+      {SHOW_APTOS && showDeposit ? (
+        <IntentsDepositPanel aptosAddress={aptosAddress} aptosIsDerived={aptosIsDerived} />
       ) : null}
     </div>
   );

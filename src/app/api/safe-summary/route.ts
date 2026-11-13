@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "owner must be a Solana address" }, { status: 400 });
   }
   try {
-    const summary = await loadSafeSummary(owner, url.searchParams.get("fresh") === "1");
+    const summary = await loadSafeSummary(owner, url.searchParams.get("fresh") === "1", true);
     return NextResponse.json(summary, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
