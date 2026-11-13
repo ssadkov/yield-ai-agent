@@ -219,3 +219,9 @@ PR #411 переносится почти как есть: `streamText` с `tool
 - Stateless Responses: https://docs.near.ai/cloud/guides/stateless-responses.md
 - Модели и цены: `GET https://cloud-api.near.ai/v1/models`, сервисы: `GET https://cloud-api.near.ai/v1/services`
 - Полный бриф репозитория: [`AGENTS.md`](../AGENTS.md), разделы 4, 4a, 4b
+
+## Картинки под E2EE (проверено 2026-11-13, `scripts/near-ai-image-probe.mjs`)
+
+- **Чтение картинок.** Сообщение с частями `[{type:"text"}, {type:"image_url", image_url:{url:"data:image/png;base64,…"}}]` шифруется целиком: `content = encrypt(JSON.stringify(parts))` — так делает `@nearai/inference-sdk`. Картинка не идёт открытым текстом. Ответили верно: `z-ai/glm-5.3-flash` (64×64 PNG = 16 image-токенов) и `Qwen/Qwen3-VL-30B-A3B-Instruct`. Наш прокси сейчас пропускает только текстовый `content`; для картинок нужно разрешить больший размер тела (сейчас 256 КБ).
+- **Генерация.** `POST /v1/images/generations` с теми же E2EE-заголовками и `prompt = encrypt(...)` для `black-forest-labs/FLUX.2-klein-4B` (есть аттестация): `b64_json` и `revised_prompt` приходят hex-шифротекстом, после расшифровки — base64 JPEG. Открыто остаются `url: null` и `file_path` (путь к файлу внутри TEE-контейнера, например `/sgl-workspace/sglang/outputs/<uuid>.jpg`) — сколько файл там хранится, неизвестно.
+- Не проверено: подпись ответа (`/v1/signature/{id}`) для картинок и цена FLUX за картинку.
