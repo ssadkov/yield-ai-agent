@@ -27,6 +27,8 @@ export type UiMessage = {
   actionCard?: ActionCard;
   /** Response-signature check for this answer; checked in this browser, not restored from history. */
   proof?: AnswerProof;
+  /** Pictures the user attached (data URLs); kept in memory only, not in saved history. */
+  images?: string[];
 };
 
 export type AdvisorSession = {
@@ -60,6 +62,8 @@ function id(): string {
 export async function runAdvisorTurn(options: {
   session: AdvisorSession;
   userText: string;
+  /** Pictures attached to this message, as data URLs (already downscaled by the browser). */
+  images?: string[];
   onAssistantDelta?: (text: string) => void;
   onStatus?: (status: string) => void;
 }): Promise<{
@@ -72,8 +76,18 @@ export async function runAdvisorTurn(options: {
   /** Exact bytes of every completion in this turn, for the response-signature check. */
   evidence: CompletionEvidence[];
 }> {
-  const { session, userText, onAssistantDelta, onStatus } = options;
-  session.history.push({ role: "user", content: userText });
+  const { session, userText, images, onAssistantDelta, onStatus } = options;
+  session.history.push(
+    images && images.length > 0
+      ? {
+          role: "user",
+          content: [
+            ...(userText ? [{ type: "text" as const, text: userText }] : []),
+            ...images.map((url) => ({ type: "image_url" as const, image_url: { url } })),
+          ],
+        }
+      : { role: "user", content: userText }
+  );
 
   const tools = session.mode === "advisor" ? ADVISOR_TOOLS : undefined;
   const maxSteps = session.mode === "advisor" ? 4 : 1;

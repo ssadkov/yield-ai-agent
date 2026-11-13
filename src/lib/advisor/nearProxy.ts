@@ -32,8 +32,12 @@ export type AttestedModel = {
   verifiedAttestations: readonly VerifiedModelAttestation[];
 };
 
+import { latestImagesOnly, type ContentPart } from "./images.ts";
+export type { ContentPart };
+
 export type ChatMessage =
   | { role: "system" | "user" | "assistant"; content: string }
+  | { role: "user"; content: ContentPart[] }
   | {
       role: "assistant";
       content: string | null;
@@ -142,7 +146,7 @@ async function encryptTools(tools: ToolDef[], modelPub: string) {
 
 async function encryptMessages(messages: ChatMessage[], modelPub: string): Promise<unknown[]> {
   const out: unknown[] = [];
-  for (const message of messages) {
+  for (const message of latestImagesOnly(messages)) {
     if (message.role === "tool") {
       out.push({
         role: "tool",
@@ -168,9 +172,12 @@ async function encryptMessages(messages: ChatMessage[], modelPub: string): Promi
       });
       continue;
     }
+    // Text and image parts are encrypted together as one JSON string, as @nearai/inference-sdk does:
+    // the picture never leaves the browser in clear.
+    const content = Array.isArray(message.content) ? JSON.stringify(message.content) : message.content ?? "";
     out.push({
       role: message.role,
-      content: await encryptToModel(message.content ?? "", modelPub),
+      content: await encryptToModel(content, modelPub),
     });
   }
   return out;

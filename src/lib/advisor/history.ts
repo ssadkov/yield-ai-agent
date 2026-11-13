@@ -86,10 +86,19 @@ export function loadAdvisorChatHistory(): StoredChatMessage[] {
   return loadChatHistory("advisor");
 }
 
-export function saveChatHistory(mode: ChatMode, messages: StoredChatMessage[]): void {
+/** Text kept for a message with pictures: they are not saved, a note says they were there. */
+function withImageNote(msg: StoredChatMessage & { images?: string[] }): string {
+  const count = msg.images?.length ?? 0;
+  if (count === 0) return msg.content;
+  const note = `[${count} image${count === 1 ? "" : "s"}]`;
+  return msg.content.trim() ? `${msg.content} ${note}` : note;
+}
+
+export function saveChatHistory(mode: ChatMode, messages: (StoredChatMessage & { images?: string[] })[]): void {
   if (typeof window === "undefined") return;
   try {
     const trimmed = messages
+      .map((msg) => ({ ...msg, content: withImageNote(msg) }))
       .filter((msg) => msg.content.trim().length > 0 || Boolean(msg.actionCard))
       .slice(-ADVISOR_CHAT_MAX_MESSAGES)
       .map((msg) => ({
@@ -128,10 +137,11 @@ export { seedHistoryForMode };
 
 /** Rebuild model context from visible UI messages after a reload. */
 export function historyFromUiMessages(
-  messages: StoredChatMessage[],
+  uiMessages: (StoredChatMessage & { images?: string[] })[],
   mode: ChatMode = "advisor"
 ): RebuiltChatMessage[] {
   const history: RebuiltChatMessage[] = [...seedHistoryForMode(mode)];
+  const messages = uiMessages.map((m) => ({ ...m, content: withImageNote(m) }));
   for (const message of messages) {
     if (!message.content.trim() && !message.actionCard && !message.plan) continue;
     if (message.role === "user") {

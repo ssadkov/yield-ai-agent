@@ -65,7 +65,8 @@ test("chat body: our models, encrypted content, capped output", () => {
   const plaintext = chat({ messages: [{ role: "user", content: "hello, spend their credits" }] });
   assert.equal(checkChatBody(plaintext, true).ok, false);
   assert.equal(checkChatBody("not json", true).ok, false);
-  assert.equal(checkChatBody(chat({ pad: "a".repeat(300 * 1024) }), true).ok, false);
+  assert.equal(checkChatBody(chat({ pad: "a".repeat(300 * 1024) }), true).ok, true); // room for encrypted pictures
+  assert.equal(checkChatBody(chat({ pad: "a".repeat(3_600_000) }), true).ok, false);
 });
 
 test("chat body: only encrypted function tools", () => {

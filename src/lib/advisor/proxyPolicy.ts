@@ -5,7 +5,8 @@
  */
 import { ADVISOR_MODELS } from "./models.ts";
 
-export const MAX_CHAT_BODY_BYTES = 256 * 1024;
+/** Encrypted chat with up to 3 downscaled pictures (~0.7 MB each as hex ciphertext); Vercel allows 4.5 MB. */
+export const MAX_CHAT_BODY_BYTES = 3_500_000;
 export const MAX_OUTPUT_TOKENS = 1200;
 export const MAX_MESSAGES = 60;
 
