@@ -11,9 +11,16 @@ import "./globals.css";
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
+const TITLE = "Yield AI Agent: your yield pays for your private AI";
+const DESCRIPTION =
+  "A private AI advisor in a verified TEE on NEAR AI Cloud, an on-chain account that earns on your USDC, and deposits from any chain through NEAR Intents.";
+
 export const metadata: Metadata = {
-  title: "Yield AI Agent",
-  description: "Private advisor desk for Yield AI — wallet, deposit, and verifiable private AI.",
+  metadataBase: new URL("https://yieldai.app"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/agent", siteName: "Yield AI", type: "website" },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 const themeBootScript = `
