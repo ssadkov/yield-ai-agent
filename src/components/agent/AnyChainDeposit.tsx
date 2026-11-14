@@ -7,6 +7,7 @@ import { INTENTS_ASSETS, SOLANA_SOL_ASSET, SOLANA_USDC_ASSET, networkOf, type In
 import { AssetPicker } from "@/components/agent/AssetPicker";
 import { FINAL_STATUSES, fetchStatus, submitDepositTx, type OneClickStatusResponse } from "@/lib/agent/oneClick";
 import { buildUsdcDepositTx, panelConnections, withFallback } from "@/lib/agent/solanaSafe";
+import { KaminoStep } from "@/components/agent/SafeSteps";
 
 type Quote = {
   depositAddress: string;
@@ -28,15 +29,25 @@ function errorText(error: unknown): string {
 /**
  * Deposit into the owner's Safe from any chain or token through NEAR Intents 1-Click. The server
  * makes the quote with the Safe as recipient; Solana assets are paid by the connected wallet, the
- * rest is sent by hand to the one-time address. USDC on Solana arrives in the Safe as idle USDC.
+ * rest is sent by hand to the one-time address. USDC on Solana arrives in the Safe as idle USDC;
+ * once it lands, the same panel offers the one signature that puts it into Kamino.
+ * The caller must make sure the Safe exists: the quote pays the Safe's address either way.
  */
-export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
+export function AnyChainDeposit({
+  onLanded,
+  onPlaced,
+  initialAmount = "",
+}: {
+  onLanded: () => void;
+  onPlaced?: () => void;
+  initialAmount?: string;
+}) {
   const { publicKey, sendTransaction } = useWallet();
   // USDC on Base by default: ~30 s and ~0.2% (2026-11-13). Tron USDT then had a temporary $100 minimum.
   const [assetId, setAssetId] = useState(
     INTENTS_ASSETS.find((a) => a.chain === "base" && a.symbol === "USDC")?.id ?? SOLANA_USDC_ASSET
   );
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(initialAmount);
   const [refundTo, setRefundTo] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [status, setStatus] = useState<OneClickStatusResponse | null>(null);
@@ -220,7 +231,7 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
           {status ? (
             <p className="mt-2 text-[13px] font-medium">
               {final === "SUCCESS"
-                ? `✓ ${status.swapDetails?.amountOutFormatted ?? quote.amountOutFormatted} USDC arrived. Press “Put it to work” on the card.`
+                ? `✓ ${status.swapDetails?.amountOutFormatted ?? quote.amountOutFormatted} USDC arrived in your Safe.`
                 : final === "REFUNDED"
                   ? `Refunded${status.swapDetails?.refundedAmountFormatted ? ` ${status.swapDetails.refundedAmountFormatted} ${quote.asset.symbol}` : ""}${status.swapDetails?.refundReason ? `: ${status.swapDetails.refundReason}` : ""}.`
                   : final === "FAILED"
@@ -285,6 +296,12 @@ export function AnyChainDeposit({ onLanded }: { onLanded: () => void }) {
                   )
               )}
             </ul>
+          ) : null}
+          {final === "SUCCESS" ? (
+            <KaminoStep
+              suggestedUsdc={Number(status?.swapDetails?.amountOutFormatted ?? quote.amountOutFormatted) || 0}
+              onPlaced={onPlaced}
+            />
           ) : null}
         </div>
       )}
