@@ -402,6 +402,12 @@ async function refusalOrHttp(response: Response, what: string): Promise<Error> {
   } catch {
     /* not JSON */
   }
+  if (response.status >= 500) {
+    // The model's own failure, passed through by the proxy. The proxy records usage only on success.
+    return new Error(
+      `${what}: the model on NEAR AI Cloud is not answering right now (HTTP ${response.status}). Nothing was charged. Try again in a few minutes.`
+    );
+  }
   return new Error(`${what} HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`);
 }
 
