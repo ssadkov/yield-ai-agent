@@ -32,6 +32,7 @@ import {
   CHAT_MODE_PLACEHOLDER,
   DEFAULT_CHAT_MODE,
   loadPreferredChatMode,
+  promptForSuggestion,
   savePreferredChatMode,
   suggestionsForMode,
   type ChatMode,
@@ -492,7 +493,7 @@ export function AdvisorChatShell() {
                   key={suggestion}
                   type="button"
                   disabled={busy}
-                  onClick={() => void send(suggestion)}
+                  onClick={() => void send(promptForSuggestion(suggestion))}
                   className="rounded-2xl border border-border/80 bg-muted/40 px-3.5 py-3 text-left text-[14px] leading-snug text-foreground/90 transition-colors hover:border-foreground/20 hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:px-4 sm:text-[15px]"
                 >
                   {suggestion}
@@ -514,7 +515,7 @@ export function AdvisorChatShell() {
                 className={[
                   "min-w-0 text-[15px]",
                   isUser
-                    ? "max-w-[86%] whitespace-pre-wrap rounded-[20px] bg-foreground px-4 py-2.5 leading-relaxed text-background"
+                    ? "max-w-[86%] whitespace-pre-wrap break-words rounded-[20px] bg-foreground px-4 py-2.5 leading-relaxed text-background"
                     : "w-full rounded-[20px] border border-border/60 bg-muted/45 px-3 py-3 text-foreground sm:px-3.5 sm:py-3.5",
                 ].join(" ")}
               >

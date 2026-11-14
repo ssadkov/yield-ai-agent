@@ -76,6 +76,7 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 |---|---|
 | Open the page. | The badge in the chat's top right goes from "Verifying TEE attestation" to **Private · TEE ✓**. Under the chat: "Try it without a wallet: 10 free requests left today." |
 | Click "Where should I put 100 USDC, and what are the risks?" | The answer streams in with today's Kamino and Exponent rates (the model called `get_usdc_yields`) and, in most runs, a deposit card with 100 USDC prefilled. |
+| Click "Explain a real transaction of the Safe program". | The model calls `explain_transaction` on a public mainnet deposit and says in plain words who paid, which programs ran (Yield AI Safe, Kamino), the fee, and what the Safe received. Any Solana signature or Solscan link you paste works the same way. |
 | Click the green line under the answer: **✓ Signed inside the attested TEE by … · checked in your browser**. | Intel TDX status, NVIDIA GPU evidence, the model key fingerprint, and **What left your browser**: a block of hex. That is the request as our server received it. |
 
 ### 2. Check that the server only sees ciphertext (2 minutes)
@@ -158,7 +159,17 @@ All of this runs in the browser; code in [`src/lib/advisor`](src/lib/advisor).
 
 Only models that NEAR itself hosts with attestation are used. There is no fallback to a model without E2EE.
 
-The advisor has four tools, all executed by the browser ([`tools.ts`](src/lib/advisor/tools.ts)): `get_usdc_yields`, `get_my_account`, `show_action_card` and `propose_plan`. The model cannot sign, send or spend.
+The advisor has five tools, all executed by the browser ([`tools.ts`](src/lib/advisor/tools.ts)):
+
+| Tool | What it does |
+|---|---|
+| `get_usdc_yields` | Today's USDC rates for the destinations a Safe can deposit into. |
+| `get_my_account` | The connected wallet and its Safe: balances, what it earned, the AI budget from yield. |
+| `explain_transaction` | Paste a Solana signature or a Solscan link: who paid whom, which programs ran, the fee, and whether it touched your Safe ([`explainTx.ts`](src/lib/agent/explainTx.ts)). |
+| `show_action_card` | A deposit or withdraw card in the chat with the amount prefilled. |
+| `propose_plan` | A concrete allocation for the owner to review and sign. |
+
+The model cannot sign, send or spend. Tool results are data: a transaction summary carries addresses, amounts and instruction names from a fixed character set, never memo text or free-form program logs.
 
 ### 🌉 NEAR Intents 1-Click: money in from any chain
 
@@ -215,6 +226,7 @@ There is no email, no card and no account. The only identifier is a wallet addre
 | The chat history (kept in your browser's `localStorage`) | Which model you use, request sizes and timing |
 | | Token counts and cost of each request (the last stream chunk carries usage in clear) |
 | | That a tool ran: `get_usdc_yields` and `get_my_account` fetch this app's own API, the second with your wallet address |
+| | Which transaction you asked about: `explain_transaction` sends the signature (public chain data) to this app's API, without your wallet address; the browser marks "your wallet" and "your Safe" itself |
 | | Page views (Vercel Web Analytics) |
 
 NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your browser and inside the attested enclave.
@@ -263,6 +275,7 @@ Changes to baseline code during the window: the main app got a proxy that serves
 | Credits: ledger, sign-in, trial, realized fees, NEAR AI billing reconciliation | `src/lib/credits/` |
 | AI pool reading from NEAR mainnet | `src/lib/advisor/aiPool.ts`, `src/app/api/ai-pool/` |
 | USDC yields API for the advisor | `src/lib/agent/usdcYields.ts`, `src/app/api/usdc-yields/` |
+| Transaction explainer for the advisor | `src/lib/agent/explainTx.ts`, `src/app/api/explain-tx/` |
 | The page | `src/components/agent/`, `src/app/` |
 | Probes used to check NEAR AI before building | `scripts/near-ai-e2ee-probe.mjs`, `scripts/near-ai-image-probe.mjs` |
 
