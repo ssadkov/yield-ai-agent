@@ -10,6 +10,7 @@ A chat advisor that nobody but you can read 🔒, an on-chain account that earns
 and a meter that turns the fee on what you earn into AI credits ⚡
 
 [![Live demo](https://img.shields.io/badge/live_demo-yieldai.app%2Fagent-34d399?style=for-the-badge)](https://yieldai.app/agent)
+[![Demo video](https://img.shields.io/badge/demo_video-2%3A15-111827?style=for-the-badge&logo=x)](https://x.com/ssadkov/status/2121723876988305573)
 
 ![NEAR AI Cloud](https://img.shields.io/badge/NEAR_AI_Cloud-TEE_%2B_E2EE-7fb0ff?style=flat-square)
 ![NEAR Intents](https://img.shields.io/badge/NEAR_Intents-1--Click-7fb0ff?style=flat-square)
@@ -17,11 +18,11 @@ and a meter that turns the fee on what you earn into AI credits ⚡
 [![CI](https://img.shields.io/github/actions/workflow/status/ssadkov/yield-ai-agent/ci.yml?branch=main&style=flat-square&label=tests)](https://github.com/ssadkov/yield-ai-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8b9bb3?style=flat-square)](LICENSE)
 
-**Tracks:** `privacy` · `defi` · `agents`
+**Tracks:** `privacy` · `defi` · `agents` · `security`
 
 </div>
 
-Built at **NEAR HACKATHON** (2026-11-01 to 2026-11-14) on top of the existing [Yield AI](https://yieldai.app) product. Yield AI itself runs on Solana and Aptos and existed before the hackathon; what is judged here is the NEAR integration written in the window. See [Built before and built in the window](#-built-before-and-built-in-the-window).
+Built at **NEAR HACKATHON** (code window 2026-10-19 to 2026-11-14, submissions from 2026-11-01) on top of the existing [Yield AI](https://yieldai.app) product. Yield AI itself runs on Solana and Aptos and existed before the hackathon; what is judged here is the NEAR integration written in the window. See [Built before and built in the window](#-built-before-and-built-in-the-window).
 
 Code: Sergei Sadkov ([@ssadkov](https://github.com/ssadkov)), Rustam Galiev ([@galiev-rustam](https://github.com/galiev-rustam)).
 
@@ -32,6 +33,7 @@ Code: Sergei Sadkov ([@ssadkov](https://github.com/ssadkov)), Rustam Galiev ([@g
 
 | You have | Do this | You see |
 |---|---|---|
+| **2 minutes, no clicks** | Watch the [demo video](https://x.com/ssadkov/status/2121723876988305573). | The whole loop on mainnet: a private question, the proof, a deposit from BNB Chain, Kamino, credits, a transaction explained, a picture. |
 | **1 minute** | Open [yieldai.app/agent](https://yieldai.app/agent) and click a starter question. No wallet. | The badge turns **Private · TEE ✓**, and the answer comes with today's rates. |
 | **2 minutes** | Run the two `curl` lines in [step 2](#2-check-that-the-server-only-sees-ciphertext-2-minutes). | Our own server refuses plaintext: `400 E2EE v2 required`. |
 | **5 minutes** | Connect a Solana wallet and follow [steps 3 to 6](#3-connect-a-wallet-phantom-solflare-or-backpack). | Money arrives from another chain, starts earning, and the yield starts paying for AI. |
@@ -101,10 +103,12 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 |---|---|
 | **Earn on USDC → Deposit → Any chain · NEAR Intents**. If you have no Safe yet, press **Create my account** (one transaction, a little SOL for rent). | A network picker and a token picker: 27 assets on Base, Ethereum, Arbitrum, Solana, Tron, BNB Chain, Polygon, Avalanche, NEAR and Bitcoin. |
 | Pick e.g. USDC on Base, enter an amount and your refund address on that network, press **Get quote**. | A one-time deposit address, the amount to send, and "At least N USDC" arriving. |
-| Send the tokens to that address. | The status line follows NEAR Intents until the USDC lands in your Safe (a few minutes). The card then shows it as idle with a **Put it to work** link. |
-| Click **Put it to work**. | One wallet signature moves the USDC into Kamino. "AI tokens your yield has paid for" starts counting. |
+| Send the tokens to that address. | The status line follows NEAR Intents until "✓ N USDC arrived in your Safe." (a few minutes), and a **Put into Kamino** step appears right below it. |
+| Click **Put into Kamino** (or later, **Put it to work** on the card). | One wallet signature moves the USDC into Kamino. "AI tokens your yield has paid for" starts counting. |
 
 With USDC already on Solana: **Deposit → From this wallet** does the same in one signature (two on the first deposit).
+
+From the chat: when the advisor puts a deposit card under its plan, **Via NEAR Intents** on that card opens the same any-chain panel with the plan's amount filled in.
 
 ### 5. Open chat, the uncensored model and pictures
 
@@ -177,7 +181,7 @@ The model cannot sign, send or spend. Tool results are data: a transaction summa
 |---|---|---|
 | Deposit into the Safe from any chain | The server asks 1-Click for an `EXACT_INPUT` quote. The recipient is the Safe address derived on the server from the owner's key, never taken from the browser. The quote is refused unless 1-Click echoes the same recipient, asset, amount and refund address. Solana assets are paid by the connected wallet; other chains are sent by hand to the one-time deposit address. | [`safe-deposit/quote/route.ts`](src/app/api/safe-deposit/quote/route.ts), [`AnyChainDeposit.tsx`](src/components/agent/AnyChainDeposit.tsx), [`intentsAssets.ts`](src/lib/agent/intentsAssets.ts) |
 | Buying AI credits | `EXACT_OUTPUT`: the buyer pays whatever the route costs and exactly $1 to $50 of USDC arrives. The deposit address is bound to the signed-in wallet in the ledger and credited when 1-Click reports success. | [`credits/quote/route.ts`](src/app/api/credits/quote/route.ts), [`credits/status/route.ts`](src/app/api/credits/status/route.ts) |
-| Deposit card in the chat | The advisor's deposit card can route wallet USDC to the Safe through 1-Click. | [`chatDeposit.ts`](src/lib/agent/chatDeposit.ts), [`oneClick.ts`](src/lib/agent/oneClick.ts) |
+| Deposit card in the chat | **Via NEAR Intents** on the advisor's card opens the same any-chain deposit with the plan's amount filled in, after checking that the Safe exists (1-Click would pay the Safe's address either way). | [`ActionCard.tsx`](src/components/agent/ActionCard.tsx), [`oneClick.ts`](src/lib/agent/oneClick.ts) |
 
 The Safe address is a program-derived address, so 1-Click pays into its USDC token account directly. No JWT is used; 1-Click's standard 0.2% fee applies.
 
@@ -202,6 +206,8 @@ What was written in the window is the path from a chat answer to a signature ([`
 4. Only then is the wallet asked to sign.
 
 Tool results and anything the model reads are treated as data. A prompt injection can at most make the model propose a plan that this check rejects.
+
+**Why this fits the `security` track: AI gets to move money without getting the keys.** Withdrawals go only to the owner's wallet (enforced by the program). The model's moves are limited to an allowlisted strategy and the amount the user typed (enforced by the browser before the wallet sees the transaction). And no prompt reaches a model whose TEE attestation the browser has not verified. Moving the allowlist and limits into the program is item 1 of [What's next](#-whats-next).
 
 ## ⚡ AI credits
 
@@ -235,7 +241,7 @@ NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your b
 
 - **Mainnet and real funds.** NEAR Intents has no testnet. Deposits are capped at 101 USDC while the Safe program has a single admin key.
 - **Trust assumptions.** Privacy rests on Intel TDX and NVIDIA attestation and on NEAR AI's SDK that verifies them. The SDK is patched to tolerate a 2-minute clock skew in NVIDIA's token ([`patches/`](patches)).
-- **Chat history is not encrypted at rest.** It sits in `localStorage` on your device. The encrypted, wallet-keyed memory described in [`docs/private-advisor.md`](docs/private-advisor.md) is not built.
+- **Chat history is not encrypted at rest.** It sits in `localStorage` on your device. The encrypted, wallet-keyed memory described in [`docs/encrypted-memory.md`](docs/encrypted-memory.md) is not built.
 - **Generated pictures have no response-signature check.** The request is encrypted to the attested key and the picture decrypts only with the browser's key, but NEAR's per-answer signature is verified for chat only.
 - **One executable strategy.** Kamino USDC. Exponent fixed-rate PT is listed for comparison; the app cannot deposit into it.
 - **The agent does not act on its own here.** Every transaction is signed by the owner. The Safe program has an executor role for automation; this app does not use it.
@@ -251,7 +257,7 @@ Each item removes one of the limitations above.
 1. **The agent acts on its own, within on-chain limits.** Use the Safe program's executor role so the agent can rebalance and compound without a signature each time. The strategy allowlist and amount limits move from the browser check into the program; withdrawals stay owner-only.
 2. **More strategies.** Fixed-rate Exponent PT as a deposit target, not only a comparison, then more USDC vaults.
 3. **More chains.** Turn on Aptos (already wired behind a flag) and add withdrawals to any chain through NEAR Intents.
-4. **Private memory.** Encrypted, wallet-keyed chat memory as described in [`docs/private-advisor.md`](docs/private-advisor.md), replacing plain `localStorage`.
+4. **Private memory.** Encrypted, wallet-keyed chat memory as described in [`docs/encrypted-memory.md`](docs/encrypted-memory.md), replacing plain `localStorage`.
 5. **Fee to AI on chain.** Route the collected performance fee into the NEAR stake automatically instead of by hand.
 6. **Then a higher cap.** Multisig admin and an external audit before the 101 USDC demo limit goes up.
 
@@ -262,7 +268,8 @@ Hackathon rules Q-001, Q-002, Q-003 and Q-005.
 **This repository was created on 2026-11-02.** Every commit is inside the window (2026-10-19 to 2026-11-14) except the content of one import commit:
 
 - Baseline import: [`258c43b`](https://github.com/ssadkov/yield-ai-agent/commit/258c43b) "Import the wallet connection baseline from Yield AI".
-- Everything written after it: https://github.com/ssadkov/yield-ai-agent/compare/258c43b...main
+- Tags (Q-003): [`pre-hackathon`](https://github.com/ssadkov/yield-ai-agent/tree/pre-hackathon) is that import, [`hackathon-submission`](https://github.com/ssadkov/yield-ai-agent/tree/hackathon-submission) is the submitted state.
+- Everything written in the window: https://github.com/ssadkov/yield-ai-agent/compare/pre-hackathon...hackathon-submission
 
 **Built before (baseline, not judged):**
 
@@ -281,7 +288,7 @@ Changes to baseline code during the window: the main app got a proxy that serves
 |---|---|
 | Attestation, E2EE, response-signature check, blind proxy and its policy | `src/lib/advisor/nearProxy.ts`, `e2ee.ts`, `proxyPolicy.ts`, `imageBilling.ts`, `refusals.ts`, `src/app/api/near/` |
 | Advisor: system rules, tools, turn loop, modes, models, pictures | `src/lib/advisor/knowledge.ts`, `tools.ts`, `runTurn.ts`, `modes.ts`, `models.ts`, `images.ts`, `imageFile.ts` |
-| NEAR Intents: any-chain Safe deposit, credit purchase, asset list, 1-Click client | `src/app/api/safe-deposit/`, `src/app/api/credits/`, `src/lib/agent/intentsAssets.ts`, `oneClick.ts`, `chatDeposit.ts` |
+| NEAR Intents: any-chain Safe deposit, credit purchase, asset list, 1-Click client | `src/app/api/safe-deposit/`, `src/app/api/credits/`, `src/lib/agent/intentsAssets.ts`, `oneClick.ts`, `src/components/agent/AnyChainDeposit.tsx`, `ActionCard.tsx` |
 | Plan checker and Safe actions | `src/lib/agent/safePlans.ts`, `solanaSafe.ts`, `src/app/api/solana-safe/` |
 | Credits: ledger, sign-in, trial, realized fees, NEAR AI billing reconciliation | `src/lib/credits/` |
 | AI pool reading from NEAR mainnet | `src/lib/advisor/aiPool.ts`, `src/app/api/ai-pool/` |

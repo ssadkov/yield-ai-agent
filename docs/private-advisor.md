@@ -1,5 +1,7 @@
 # Private advisor — инструкция для реализации чата
 
+> **Internal working notes in Russian, kept as the build log.** They describe plans at the time and may be out of date. The reference is [README.md](../README.md).
+
 > Для Рустама. Собрано 2026-11-09 из проверок 2026-11-06…08. Всё, что помечено «проверено», запускалось
 > вживую; остальное — по документации NEAR AI и требует проверки.
 > Дедлайн хакатона: подача **2026-11-14 23:59 UTC**. Рабочий E2EE-чат на `yieldai.app/agent` нужен

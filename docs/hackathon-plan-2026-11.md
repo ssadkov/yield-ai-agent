@@ -1,5 +1,7 @@
 # План NEAR Hackathon до сдачи — 2026-11-14
 
+> **Internal working notes in Russian, kept as the build log.** They describe plans at the time and may be out of date. The reference is [README.md](../README.md).
+
 Зафиксирован 2026-11-04, обновлён 2026-11-10: **на хакатон — только Solana** (решение Сергея 2026-11-10). Сдача — **2026-11-14 23:59 UTC**. Судейство — 2026-11-16…18. Хостинг демо держим до 2026-11-25.
 Засчитывается только NEAR-интеграция, сделанная в окне хакатона (правила Q-001/Q-002, см. `AGENTS.md`, раздел 5).
 

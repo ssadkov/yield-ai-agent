@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { ActionCard as ActionCardData } from "@/lib/advisor/tools";
-import { formatChatDepositAmount } from "@/lib/agent/chatDeposit";
 import { panelConnections, readSolanaSafe, withFallback } from "@/lib/agent/solanaSafe";
 import { AnyChainDeposit } from "@/components/agent/AnyChainDeposit";
 import { CreateSafeStep, KaminoStep, WalletDepositStep } from "@/components/agent/SafeSteps";
@@ -16,6 +15,12 @@ function parseAmount(raw: string): number | null {
   const value = Number(normalized);
   if (!Number.isFinite(value) || value <= 0) return null;
   return value;
+}
+
+/** The card's amount for the input: up to 6 decimals, no trailing zeros. */
+function formatChatDepositAmount(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(6).replace(/\.?0+$/, "") || "0";
 }
 
 function errorText(error: unknown): string {
