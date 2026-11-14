@@ -535,7 +535,7 @@ export function EarnPanel() {
             </div>
           ) : (
             <div className="mt-4">
-              <AnyChainDeposit onLanded={() => void refresh(true)} />
+              <AnyChainDeposit onLanded={() => void refresh(true)} onPlaced={() => void refresh(true)} />
             </div>
           )}
           {errorLine}

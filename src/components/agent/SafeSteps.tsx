@@ -201,7 +201,7 @@ export function CreateSafeStep({
 }
 
 /** Put idle Safe USDC into the Kamino USDC vault with one owner-signed transaction. */
-export function KaminoStep({ suggestedUsdc }: { suggestedUsdc: number }) {
+export function KaminoStep({ suggestedUsdc, onPlaced }: { suggestedUsdc: number; onPlaced?: () => void }) {
   const { owner, run } = useOwnerSigner();
   const [idleRaw, setIdleRaw] = useState<bigint | null>(null);
   const [amount, setAmount] = useState("");
@@ -241,6 +241,7 @@ export function KaminoStep({ suggestedUsdc }: { suggestedUsdc: number }) {
     try {
       const sig = await run("kamino_deposit", () => requestKaminoDepositPlan(owner, formatUsdc(amountRaw)), amountRaw);
       setSignature(sig);
+      onPlaced?.();
     } catch (err) {
       setError(errorText(err));
     } finally {
