@@ -1,5 +1,7 @@
 # Prompt caching (NEAR AI cache read)
 
+> **Internal working notes in Russian, kept as the build log.** They describe plans at the time and may be out of date. The reference is [README.md](../README.md).
+
 > 2026-11-11. Как у нас устроено кеширование префикса промпта и как проверить `cached_tokens`.
 > Документация NEAR: https://docs.near.ai/cloud/guides/prompt-caching
 

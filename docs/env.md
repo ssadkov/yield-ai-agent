@@ -1,44 +1,43 @@
-# Environment variables (private advisor desk)
+# Environment variables
 
-Скопируй `.env.example` → `.env.local`. Секреты в репозиторий не коммитить (`.env*` в `.gitignore`, кроме `.env.example`).
+Copy `.env.example` to `.env.local`. Never commit secrets: `.env*` is in `.gitignore`, except `.env.example`.
 
-На Vercel того же проекта задай те же ключи в Project Settings → Environment Variables.
+On Vercel, set the same keys in Project Settings → Environment Variables.
 
 ## Required for the advisor chat
 
 | Variable | Where used | What it is |
 |---|---|---|
-| `NEAR_AI_API_KEY` | `src/app/api/near/[...path]/route.ts` | API-ключ NEAR AI Cloud. Браузер ходит на `/agent/api/near/…`; сервер подставляет `Authorization: Bearer …` и проксирует шифротекст в `https://cloud-api.near.ai`. Без ключа чат отвечает **503**. Ключ в браузер и в git не класть. |
+| `NEAR_AI_API_KEY` | `src/app/api/near/[...path]/route.ts` | The NEAR AI Cloud API key. The browser calls `/agent/api/near/…`; the server adds `Authorization: Bearer …` and forwards the ciphertext to `https://cloud-api.near.ai`. Without the key the chat answers **503**. The key never goes to the browser or to git. |
 
-Как получить: [cloud.near.ai](https://cloud.near.ai) → workspace → API keys. **Обязательно ставь `spend_limit`** на ключ: это единственный жёсткий потолок расходов.
+How to get one: [cloud.near.ai](https://cloud.near.ai) → workspace → API keys. **Always set a `spend_limit` on the key**: it is the only hard spending cap.
 
-Прокси пропускает с этим ключом только E2EE-чат к моделям из `src/lib/advisor/models.ts` (содержимое сообщений и инструментов — шифротекст, `max_tokens` ≤ 1200, без встроенных платных инструментов), их отчёты аттестации и подписи ответов. Всё остальное — 4xx. Правила и тесты: `src/lib/advisor/proxyPolicy.ts`, `pnpm test`.
+With this key the proxy passes only E2EE chat to the models in `src/lib/advisor/models.ts` (message and tool content is ciphertext, `max_tokens` ≤ 1200, no built-in paid tools), E2EE picture requests, their attestation reports and the response signatures. Everything else gets a 4xx. Rules and tests: `src/lib/advisor/proxyPolicy.ts`, `pnpm test`.
 
-Проверка без UI: ключ в `.env.local`, затем `node scripts/near-ai-e2ee-probe.mjs`.
+Check without the UI: put the key in `.env.local`, then run `node scripts/near-ai-e2ee-probe.mjs`.
 
-## AI credits (optional — без них чат открыт всем, потолок только `spend_limit`)
+## AI credits (optional; without them the chat is open to anyone and the only cap is `spend_limit`)
 
-Кредиты включаются, когда задан `DATABASE_URL`. Тогда чат требует входа подписью Solana-кошелька и положительного баланса.
+Credits turn on when `DATABASE_URL` is set. Visitors without a wallet then get the daily trial; a wallet signs in with a Solana signature and spends its balance.
 
 | Variable | What it is |
 |---|---|
-| `DATABASE_URL` | Neon Postgres (Vercel → Storage → Neon). Таблицы `advisor_usage` и `advisor_purchases` создаются сами при первом запросе. Промптов и ответов там нет — кошельки, id запросов NEAR AI с ценой, покупки. |
-| `SESSION_SECRET` | Случайная строка 32+ символов: подписывает challenge и токен сессии. Сменить = разлогинить всех. |
-| `ADVISOR_FREE_USD_PER_MONTH` | Бесплатный лимит на кошелёк в месяц из AI-пула, по умолчанию `0.05`. |
-| `CREDITS_RECEIVER` | Адрес, куда 1-Click платит за купленные кредиты (по умолчанию USDC на Solana). Отдельный кошелёк, не ключ admin/upgrade программы. Без него покупка выключена, бесплатный лимит работает. |
-| `CREDITS_DESTINATION_ASSET` | Актив получения в формате 1-Click, по умолчанию USDC на Solana. |
-| `AI_POOL_NEAR_ACCOUNT`, `AI_POOL_PRODUCT_ID` | Чей стейк NEAR AI показывает счётчик пула; по умолчанию `sadkov.near`. |
+| `DATABASE_URL` | Neon Postgres (Vercel → Storage → Neon). The tables are created on the first request. They hold no prompts and no answers: wallets, NEAR AI request ids with their cost, and purchases. |
+| `SESSION_SECRET` | A random string of 32+ characters. It signs the sign-in challenge, the session token and the trial's IP hash. Changing it signs everyone out. |
+| `ADVISOR_FREE_USD_PER_MONTH` | Free allowance per wallet per month from the AI pool, default `0.05`. |
+| `ADVISOR_TRIAL_REQUESTS_PER_DAY`, `ADVISOR_TRIAL_USD_PER_DAY` | The no-wallet trial: requests per visitor per day, and one daily cap for all visitors together. Defaults `10` and `0.1`. |
+| `CREDITS_RECEIVER` | The address 1-Click pays for bought credits (USDC on Solana by default). A separate wallet, not the program's admin or upgrade key. Without it buying is off; the free allowance still works. |
+| `CREDITS_DESTINATION_ASSET` | The asset received, as a 1-Click asset id; default USDC on Solana. |
+| `AI_POOL_NEAR_ACCOUNT`, `AI_POOL_PRODUCT_ID` | Whose NEAR AI stake the pool meter shows. |
 
-## Optional (already in the repo, not new in this branch)
-
-Эти переменные относятся к USDC yields / хосту Safe, не к E2EE-чату:
+## Optional (from the main app, not about the private chat)
 
 | Variable | Default / notes |
 |---|---|
-| `USDC_YIELDS_INCLUDE_APTOS` | `1` — подтянуть Aptos-строки из основного приложения (на проде роут часто 404). На хакатон обычно не ставить. |
-| `SOLANA_SAFE_API_ORIGIN` | Origin API Solana Safe (если не дефолтный). |
-| `YIELD_AI_API_ORIGIN` | Origin основного Yield AI API. |
-| `NEXT_PUBLIC_DERIVED_SAFE_HOSTS` | Доп. хосты, где разрешён derived Safe (через запятую). |
+| `USDC_YIELDS_INCLUDE_APTOS` | `1` adds Aptos rows from the main app to the yields tool. Off for the hackathon demo. |
+| `SOLANA_SAFE_API_ORIGIN` | Origin of the Solana Safe API, if not the default. |
+| `YIELD_AI_API_ORIGIN` | Origin of the main Yield AI API. |
+| `NEXT_PUBLIC_DERIVED_SAFE_HOSTS` | Extra hosts, comma-separated, where a derived Safe is allowed. |
 
 ## Minimal local setup
 
