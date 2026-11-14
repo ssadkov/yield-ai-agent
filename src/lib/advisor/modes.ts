@@ -80,7 +80,22 @@ export const ADVISOR_SUGGESTIONS = [
   "I have USDC on Base. How do I earn on it here?",
   "Where should I put 100 USDC, and what are the risks?",
   "What’s in my wallet, and what should I do with it?",
+  "Explain a real transaction of the Safe program",
 ] as const;
+
+/**
+ * Starter questions whose button text is shorter than what is sent. The transaction is a public
+ * deposit into a Safe on Solana mainnet (2026-11-12): USDC from a wallet into Kamino.
+ */
+export const SUGGESTION_PROMPTS: Record<string, string> = {
+  "Explain a real transaction of the Safe program":
+    "Explain this transaction: https://solscan.io/tx/4xkiTmE4qb6KecQsX4zc6tbuV2GQ8ck4fiE7jNAwQudkpUGfvUWKoxETY96BbMHLDSVk4GTiWi8QEe7Asq82tBw2",
+};
+
+/** What a starter button sends. */
+export function promptForSuggestion(suggestion: string): string {
+  return SUGGESTION_PROMPTS[suggestion] ?? suggestion;
+}
 
 export const FREE_SUGGESTIONS = [
   "Explain what a TEE is in plain language",

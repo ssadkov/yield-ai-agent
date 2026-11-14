@@ -85,8 +85,7 @@ if (previous !== stamp) {
     console.log("ensure-sdk-patch: dropped .next/cache (it was built from other SDK code or has no stamp).");
   }
   mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(stampPath, `${stamp}
-`);
+  writeFileSync(stampPath, stamp);
 } else {
   console.log("ensure-sdk-patch: bundler cache matches this SDK code.");
 }

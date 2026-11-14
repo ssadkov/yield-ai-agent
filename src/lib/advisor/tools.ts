@@ -1,3 +1,7 @@
+import { PublicKey } from "@solana/web3.js";
+import { formatTxSummary, parseSignatureInput, type TxSummary } from "../agent/explainTx.ts";
+import { safeAddress } from "../agent/solanaSafe.ts";
+
 export const ADVISOR_TOOLS = [
   {
     type: "function" as const,
@@ -21,6 +25,25 @@ export const ADVISOR_TOOLS = [
       parameters: {
         type: "object",
         properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "explain_transaction",
+      description:
+        "Read one Solana mainnet transaction the user pasted (a signature, or a solscan.io/tx link): who signed and paid the fee, which programs ran, whose token and SOL balances changed, and whether it touched the user's Yield AI Safe. Call whenever the user's message contains a Solana transaction signature or an explorer link to one.",
+      parameters: {
+        type: "object",
+        properties: {
+          signature: {
+            type: "string",
+            description: "The signature or explorer link, copied exactly as the user pasted it",
+          },
+        },
+        required: ["signature"],
         additionalProperties: false,
       },
     },
@@ -167,8 +190,46 @@ async function myAccount(): Promise<string> {
   ].join("\n");
 }
 
-export async function runAdvisorTool(name: string, argsJson: string): Promise<string> {
+/**
+ * One transaction, fetched by this app's server from a Solana RPC node and summarized there
+ * (src/lib/agent/explainTx.ts). Only the signature is sent. "Your wallet" and "your Safe" are marked
+ * here in the browser, so the server is not told whose question it is.
+ */
+async function explainTransaction(argsJson: string, userText: string): Promise<string> {
+  let fromModel: unknown;
+  try {
+    fromModel = (JSON.parse(argsJson || "{}") as { signature?: unknown }).signature;
+  } catch {
+    fromModel = null;
+  }
+  // What the user pasted wins over the model's copy of it: a model can drop a character of 88.
+  const pasted = parseSignatureInput(userText);
+  const parsed = pasted.ok ? pasted : parseSignatureInput(fromModel);
+  if (!parsed.ok) return `explain_transaction: ${parsed.error}`;
+  const response = await fetch(`/agent/api/explain-tx?signature=${parsed.signature}`, { cache: "no-store" });
+  if (!response.ok) {
+    const refusal = await response
+      .json()
+      .then((body: { error?: unknown }) => (typeof body.error === "string" ? body.error : null))
+      .catch(() => null);
+    return `explain_transaction failed: ${refusal ?? `HTTP ${response.status}`}`;
+  }
+  const summary = (await response.json()) as TxSummary;
+  let safe: string | null = null;
+  if (advisorWallet) {
+    try {
+      safe = safeAddress(new PublicKey(advisorWallet)).toBase58();
+    } catch {
+      safe = null;
+    }
+  }
+  return formatTxSummary(summary, { wallet: advisorWallet, safe });
+}
+
+/** `userText` is the user's latest message; only `explain_transaction` reads it. */
+export async function runAdvisorTool(name: string, argsJson: string, userText = ""): Promise<string> {
   if (name === "get_my_account") return myAccount();
+  if (name === "explain_transaction") return explainTransaction(argsJson, userText);
   if (name === "get_usdc_yields") {
     const response = await fetch("/agent/api/usdc-yields?format=text", { cache: "no-store" });
     if (!response.ok) return `get_usdc_yields failed: HTTP ${response.status}`;

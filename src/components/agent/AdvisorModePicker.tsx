@@ -51,7 +51,7 @@ export function AdvisorModePicker({
         aria-label="Chat mode"
         title={`${CHAT_MODE_LABEL[value]} · ${CHAT_MODE_MODEL[value]}`}
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-8 max-w-[9rem] items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 text-[12.5px] font-medium tracking-tight text-foreground/85 transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        className="tap-target inline-flex h-8 max-w-[9rem] items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 text-[12.5px] font-medium tracking-tight text-foreground/85 transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
       >
         <span className="truncate">{CHAT_MODE_LABEL[value]}</span>
         <svg

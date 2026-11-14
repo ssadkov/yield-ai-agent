@@ -305,3 +305,26 @@ input:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Touch targets. On a touch screen every small control marked .tap-target answers to at least a
+ * 40px square around its centre. Nothing changes in how it looks or where its neighbours sit.
+ * The position rule is in the base layer so a utility such as .absolute still wins.
+ */
+@layer base {
+  .tap-target {
+    position: relative;
+  }
+}
+
+@media (pointer: coarse) {
+  .tap-target::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 40px);
+    height: max(100%, 40px);
+    transform: translate(-50%, -50%);
+  }
+}

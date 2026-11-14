@@ -149,7 +149,7 @@ export async function runAdvisorTurn(options: {
 
     for (const tc of result.toolCalls) {
       onStatus?.(`Tool: ${tc.name}`);
-      const toolResult = await runAdvisorTool(tc.name, tc.arguments || "{}");
+      const toolResult = await runAdvisorTool(tc.name, tc.arguments || "{}", userText);
       if (tc.name === "propose_plan") {
         try {
           const parsed = JSON.parse(toolResult) as { ok?: boolean; plan?: ProposedPlan };

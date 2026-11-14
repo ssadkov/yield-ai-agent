@@ -14,7 +14,7 @@ and a meter that turns the fee on what you earn into AI credits ⚡
 ![NEAR AI Cloud](https://img.shields.io/badge/NEAR_AI_Cloud-TEE_%2B_E2EE-7fb0ff?style=flat-square)
 ![NEAR Intents](https://img.shields.io/badge/NEAR_Intents-1--Click-7fb0ff?style=flat-square)
 ![Solana](https://img.shields.io/badge/Solana-Safe_program-a78bfa?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-64_passing-34d399?style=flat-square)
+[![CI](https://img.shields.io/github/actions/workflow/status/ssadkov/yield-ai-agent/ci.yml?branch=main&style=flat-square&label=tests)](https://github.com/ssadkov/yield-ai-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8b9bb3?style=flat-square)](LICENSE)
 
 **Tracks:** `privacy` · `defi` · `agents`
@@ -74,9 +74,10 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 
 | Do | See |
 |---|---|
-| Open the page. | The badge in the chat's top right goes from "Verifying TEE attestation" to **Private · TEE ✓**. Under the chat: "Try it without a wallet: 10 free requests left today." |
-| Click "Where should I put 100 USDC, and what are the risks?" | The answer streams in with today's Kamino and Exponent rates (the model called `get_usdc_yields`) and, in most runs, a deposit card with 100 USDC prefilled. |
-| Click the green line under the answer: **✓ Signed inside the attested TEE by … · checked in your browser**. | Intel TDX status, NVIDIA GPU evidence, the model key fingerprint, and **What left your browser**: a block of hex. That is the request as our server received it. |
+| Open the page. | Five starter questions, and a **Private** badge in the chat's top right. Under the chat: "Try it without a wallet: 10 free requests left today." Nothing has been sent yet. |
+| Click "Where should I put 100 USDC, and what are the risks?" | "Verifying TEE attestation" shows for a few seconds, then the badge turns **Private · TEE ✓** and the answer streams in with today's Kamino and Exponent rates (the model called `get_usdc_yields`) and, in most runs, a deposit card with 100 USDC prefilled. |
+| Click "Explain a real transaction of the Safe program". | The model calls `explain_transaction` on a public mainnet deposit and says in plain words who paid, which programs ran (Yield AI Safe, Kamino), the fee, and what the Safe received. Any Solana signature or Solscan link you paste works the same way. |
+| Click the green line under the answer: **✓ Signed inside the attested TEE by … · checked in your browser**. | **What this browser checked, in plain words**: one sentence per check (the enclave, the graphics card, the fresh proof, the encryption key, the signature on this answer), then **What left your browser**: a block of hex. That is the request as our server received it. **What the model was told** shows the full system prompt and the tool list. |
 
 ### 2. Check that the server only sees ciphertext (2 minutes)
 
@@ -90,7 +91,7 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 
 | Do | See |
 |---|---|
-| Click **Connect**, pick a Solana wallet. | The **Earn on USDC** card on the left with the current Kamino APY. No signature is asked yet. |
+| Click **Connect Wallet** (**Connect** on a phone), pick a Solana wallet. | The **Earn on USDC** card on the left with the current Kamino APY. No signature is asked yet. |
 | Under the chat, click **Sign once** and sign the message (it moves no funds). | "AI credits: $0.05 · free left … · from your Safe yield … · bought …". Click the **i** to see the NEAR staking pool that funds the free allowance, read live from NEAR mainnet. |
 | Ask "What's in my wallet, and what should I do with it?" | The model calls `get_my_account` and answers with your real wallet and Safe balances. |
 
@@ -158,7 +159,17 @@ All of this runs in the browser; code in [`src/lib/advisor`](src/lib/advisor).
 
 Only models that NEAR itself hosts with attestation are used. There is no fallback to a model without E2EE.
 
-The advisor has four tools, all executed by the browser ([`tools.ts`](src/lib/advisor/tools.ts)): `get_usdc_yields`, `get_my_account`, `show_action_card` and `propose_plan`. The model cannot sign, send or spend.
+The advisor has five tools, all executed by the browser ([`tools.ts`](src/lib/advisor/tools.ts)):
+
+| Tool | What it does |
+|---|---|
+| `get_usdc_yields` | Today's USDC rates for the destinations a Safe can deposit into. |
+| `get_my_account` | The connected wallet and its Safe: balances, what it earned, the AI budget from yield. |
+| `explain_transaction` | Paste a Solana signature or a Solscan link: who paid whom, which programs ran, the fee, and whether it touched your Safe ([`explainTx.ts`](src/lib/agent/explainTx.ts)). |
+| `show_action_card` | A deposit or withdraw card in the chat with the amount prefilled. |
+| `propose_plan` | A concrete allocation for the owner to review and sign. |
+
+The model cannot sign, send or spend. Tool results are data: a transaction summary carries addresses, amounts and instruction names from a fixed character set, never memo text or free-form program logs.
 
 ### 🌉 NEAR Intents 1-Click: money in from any chain
 
@@ -183,7 +194,7 @@ What was written in the window is the path from a chat answer to a signature ([`
 1. The model calls `propose_plan` or `show_action_card`. The browser validates the arguments in code: the strategy must be on the allowlist (today only `solana:kamino_usdc`), the amount must be within limits.
 2. The Safe API builds an unsigned transaction.
 3. `checkPlanTransaction` deserializes it before the wallet sees it and requires:
-   - the owner is the only signer and the fee payer;
+   - the owner is the only signer and the fee payer, and the priority fee is at most 0.01 SOL;
    - every instruction belongs to the Compute Budget program, the Safe program, or is the idempotent creation of one expected token account;
    - the Safe instructions are exactly the expected sequence for this action (for example `set_allocation, deposit, kamino_deposit, set_allocation`);
    - the amount equals the amount the user typed;
@@ -215,6 +226,7 @@ There is no email, no card and no account. The only identifier is a wallet addre
 | The chat history (kept in your browser's `localStorage`) | Which model you use, request sizes and timing |
 | | Token counts and cost of each request (the last stream chunk carries usage in clear) |
 | | That a tool ran: `get_usdc_yields` and `get_my_account` fetch this app's own API, the second with your wallet address |
+| | Which transaction you asked about: `explain_transaction` sends the signature (public chain data) to this app's API, without your wallet address; the browser marks "your wallet" and "your Safe" itself |
 | | Page views (Vercel Web Analytics) |
 
 NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your browser and inside the attested enclave.
@@ -256,13 +268,14 @@ Changes to baseline code during the window: the main app got a proxy that serves
 
 | Area | Code |
 |---|---|
-| Attestation, E2EE, response-signature check, blind proxy and its policy | `src/lib/advisor/nearProxy.ts`, `e2ee.ts`, `proxyPolicy.ts`, `src/app/api/near/` |
+| Attestation, E2EE, response-signature check, blind proxy and its policy | `src/lib/advisor/nearProxy.ts`, `e2ee.ts`, `proxyPolicy.ts`, `imageBilling.ts`, `refusals.ts`, `src/app/api/near/` |
 | Advisor: system rules, tools, turn loop, modes, models, pictures | `src/lib/advisor/knowledge.ts`, `tools.ts`, `runTurn.ts`, `modes.ts`, `models.ts`, `images.ts`, `imageFile.ts` |
 | NEAR Intents: any-chain Safe deposit, credit purchase, asset list, 1-Click client | `src/app/api/safe-deposit/`, `src/app/api/credits/`, `src/lib/agent/intentsAssets.ts`, `oneClick.ts`, `chatDeposit.ts` |
 | Plan checker and Safe actions | `src/lib/agent/safePlans.ts`, `solanaSafe.ts`, `src/app/api/solana-safe/` |
 | Credits: ledger, sign-in, trial, realized fees, NEAR AI billing reconciliation | `src/lib/credits/` |
 | AI pool reading from NEAR mainnet | `src/lib/advisor/aiPool.ts`, `src/app/api/ai-pool/` |
 | USDC yields API for the advisor | `src/lib/agent/usdcYields.ts`, `src/app/api/usdc-yields/` |
+| Transaction explainer for the advisor | `src/lib/agent/explainTx.ts`, `src/app/api/explain-tx/` |
 | The page | `src/components/agent/`, `src/app/` |
 | Probes used to check NEAR AI before building | `scripts/near-ai-e2ee-probe.mjs`, `scripts/near-ai-image-probe.mjs` |
 
@@ -302,11 +315,13 @@ More detail in [`docs/env.md`](docs/env.md). Never commit `.env.local`.
 Checks:
 
 ```bash
-pnpm test        # unit tests: proxy policy, plan checker, ledger, trial, sessions, yields
+pnpm test        # unit tests: proxy policy, picture billing, plan checker, transaction explainer, ledger, trial, sessions, yields
 pnpm typecheck
 pnpm build
 node scripts/near-ai-e2ee-probe.mjs   # encrypted round trip against NEAR AI, needs the key
 ```
+
+The same three checks run on every push and pull request with no secrets ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); a fresh clone without `.env.local` passes them.
 
 A Solana wallet on `localhost` works for the chat and for reading balances. The Safe address depends only on the wallet, so it is the same on every host.
 
