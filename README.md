@@ -14,7 +14,7 @@ and a meter that turns the fee on what you earn into AI credits ⚡
 ![NEAR AI Cloud](https://img.shields.io/badge/NEAR_AI_Cloud-TEE_%2B_E2EE-7fb0ff?style=flat-square)
 ![NEAR Intents](https://img.shields.io/badge/NEAR_Intents-1--Click-7fb0ff?style=flat-square)
 ![Solana](https://img.shields.io/badge/Solana-Safe_program-a78bfa?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-64_passing-34d399?style=flat-square)
+[![CI](https://img.shields.io/github/actions/workflow/status/ssadkov/yield-ai-agent/ci.yml?branch=main&style=flat-square&label=tests)](https://github.com/ssadkov/yield-ai-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8b9bb3?style=flat-square)](LICENSE)
 
 **Tracks:** `privacy` · `defi` · `agents`
@@ -315,11 +315,13 @@ More detail in [`docs/env.md`](docs/env.md). Never commit `.env.local`.
 Checks:
 
 ```bash
-pnpm test        # unit tests: proxy policy, plan checker, ledger, trial, sessions, yields
+pnpm test        # unit tests: proxy policy, picture billing, plan checker, transaction explainer, ledger, trial, sessions, yields
 pnpm typecheck
 pnpm build
 node scripts/near-ai-e2ee-probe.mjs   # encrypted round trip against NEAR AI, needs the key
 ```
+
+The same three checks run on every push and pull request with no secrets ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); a fresh clone without `.env.local` passes them.
 
 A Solana wallet on `localhost` works for the chat and for reading balances. The Safe address depends only on the wallet, so it is the same on every host.
 
