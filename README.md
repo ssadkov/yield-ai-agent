@@ -74,8 +74,8 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 
 | Do | See |
 |---|---|
-| Open the page. | The badge in the chat's top right goes from "Verifying TEE attestation" to **Private · TEE ✓**. Under the chat: "Try it without a wallet: 10 free requests left today." |
-| Click "Where should I put 100 USDC, and what are the risks?" | The answer streams in with today's Kamino and Exponent rates (the model called `get_usdc_yields`) and, in most runs, a deposit card with 100 USDC prefilled. |
+| Open the page. | Five starter questions, and a **Private** badge in the chat's top right. Under the chat: "Try it without a wallet: 10 free requests left today." Nothing has been sent yet. |
+| Click "Where should I put 100 USDC, and what are the risks?" | "Verifying TEE attestation" shows for a few seconds, then the badge turns **Private · TEE ✓** and the answer streams in with today's Kamino and Exponent rates (the model called `get_usdc_yields`) and, in most runs, a deposit card with 100 USDC prefilled. |
 | Click "Explain a real transaction of the Safe program". | The model calls `explain_transaction` on a public mainnet deposit and says in plain words who paid, which programs ran (Yield AI Safe, Kamino), the fee, and what the Safe received. Any Solana signature or Solscan link you paste works the same way. |
 | Click the green line under the answer: **✓ Signed inside the attested TEE by … · checked in your browser**. | **What this browser checked, in plain words**: one sentence per check (the enclave, the graphics card, the fresh proof, the encryption key, the signature on this answer), then **What left your browser**: a block of hex. That is the request as our server received it. **What the model was told** shows the full system prompt and the tool list. |
 
@@ -91,7 +91,7 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 
 | Do | See |
 |---|---|
-| Click **Connect**, pick a Solana wallet. | The **Earn on USDC** card on the left with the current Kamino APY. No signature is asked yet. |
+| Click **Connect Wallet** (**Connect** on a phone), pick a Solana wallet. | The **Earn on USDC** card on the left with the current Kamino APY. No signature is asked yet. |
 | Under the chat, click **Sign once** and sign the message (it moves no funds). | "AI credits: $0.05 · free left … · from your Safe yield … · bought …". Click the **i** to see the NEAR staking pool that funds the free allowance, read live from NEAR mainnet. |
 | Ask "What's in my wallet, and what should I do with it?" | The model calls `get_my_account` and answers with your real wallet and Safe balances. |
 
@@ -268,7 +268,7 @@ Changes to baseline code during the window: the main app got a proxy that serves
 
 | Area | Code |
 |---|---|
-| Attestation, E2EE, response-signature check, blind proxy and its policy | `src/lib/advisor/nearProxy.ts`, `e2ee.ts`, `proxyPolicy.ts`, `src/app/api/near/` |
+| Attestation, E2EE, response-signature check, blind proxy and its policy | `src/lib/advisor/nearProxy.ts`, `e2ee.ts`, `proxyPolicy.ts`, `imageBilling.ts`, `refusals.ts`, `src/app/api/near/` |
 | Advisor: system rules, tools, turn loop, modes, models, pictures | `src/lib/advisor/knowledge.ts`, `tools.ts`, `runTurn.ts`, `modes.ts`, `models.ts`, `images.ts`, `imageFile.ts` |
 | NEAR Intents: any-chain Safe deposit, credit purchase, asset list, 1-Click client | `src/app/api/safe-deposit/`, `src/app/api/credits/`, `src/lib/agent/intentsAssets.ts`, `oneClick.ts`, `chatDeposit.ts` |
 | Plan checker and Safe actions | `src/lib/agent/safePlans.ts`, `solanaSafe.ts`, `src/app/api/solana-safe/` |
