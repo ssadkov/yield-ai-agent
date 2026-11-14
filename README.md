@@ -77,7 +77,7 @@ Everything is on https://yieldai.app/agent. Steps 1 and 2 need no wallet and no 
 | Open the page. | The badge in the chat's top right goes from "Verifying TEE attestation" to **Private · TEE ✓**. Under the chat: "Try it without a wallet: 10 free requests left today." |
 | Click "Where should I put 100 USDC, and what are the risks?" | The answer streams in with today's Kamino and Exponent rates (the model called `get_usdc_yields`) and, in most runs, a deposit card with 100 USDC prefilled. |
 | Click "Explain a real transaction of the Safe program". | The model calls `explain_transaction` on a public mainnet deposit and says in plain words who paid, which programs ran (Yield AI Safe, Kamino), the fee, and what the Safe received. Any Solana signature or Solscan link you paste works the same way. |
-| Click the green line under the answer: **✓ Signed inside the attested TEE by … · checked in your browser**. | Intel TDX status, NVIDIA GPU evidence, the model key fingerprint, and **What left your browser**: a block of hex. That is the request as our server received it. |
+| Click the green line under the answer: **✓ Signed inside the attested TEE by … · checked in your browser**. | **What this browser checked, in plain words**: one sentence per check (the enclave, the graphics card, the fresh proof, the encryption key, the signature on this answer), then **What left your browser**: a block of hex. That is the request as our server received it. **What the model was told** shows the full system prompt and the tool list. |
 
 ### 2. Check that the server only sees ciphertext (2 minutes)
 

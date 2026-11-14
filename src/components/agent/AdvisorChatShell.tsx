@@ -562,6 +562,7 @@ export function AdvisorChatShell() {
                         proof={message.proof ?? "checking"}
                         attestation={attestation}
                         model={model}
+                        mode={mode}
                       />
                     ) : null}
                   </div>
