@@ -36,7 +36,7 @@ Code: Sergei Sadkov ([@ssadkov](https://github.com/ssadkov)), Rustam Galiev ([@g
 | **2 minutes** | Run the two `curl` lines in [step 2](#2-check-that-the-server-only-sees-ciphertext-2-minutes). | Our own server refuses plaintext: `400 E2EE v2 required`. |
 | **5 minutes** | Connect a Solana wallet and follow [steps 3 to 6](#3-connect-a-wallet-phantom-solflare-or-backpack). | Money arrives from another chain, starts earning, and the yield starts paying for AI. |
 
-**On this page:** [Problem](#-the-problem) · [What it is](#-what-this-is) · [Try it](#-try-it) · [How NEAR is used](#-how-near-is-used) · [Agentic wallet](#-the-agentic-wallet-propose-check-sign) · [AI credits](#-ai-credits) · [What the server sees](#-what-our-server-can-and-cannot-see) · [Limitations](#-limitations) · [Before / in the window](#-built-before-and-built-in-the-window) · [Run locally](#-run-locally)
+**On this page:** [Problem](#-the-problem) · [What it is](#-what-this-is) · [Try it](#-try-it) · [How NEAR is used](#-how-near-is-used) · [Agentic wallet](#-the-agentic-wallet-propose-check-sign) · [AI credits](#-ai-credits) · [What the server sees](#-what-our-server-can-and-cannot-see) · [Limitations](#-limitations) · [What's next](#-whats-next) · [Before / in the window](#-built-before-and-built-in-the-window) · [Run locally](#-run-locally)
 
 ## 🤔 The problem
 
@@ -243,6 +243,17 @@ NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your b
 - **The no-wallet trial is keyed by IP** and can be exhausted by other users behind the same address.
 - **Solana only in this demo.** Aptos is wired underneath (the wallet adapter is shared with the main app) and hidden with a flag.
 - **Not audited.** Not financial advice. Rates are read live from Kamino and Exponent and change.
+
+## 🧭 What's next
+
+Each item removes one of the limitations above.
+
+1. **The agent acts on its own, within on-chain limits.** Use the Safe program's executor role so the agent can rebalance and compound without a signature each time. The strategy allowlist and amount limits move from the browser check into the program; withdrawals stay owner-only.
+2. **More strategies.** Fixed-rate Exponent PT as a deposit target, not only a comparison, then more USDC vaults.
+3. **More chains.** Turn on Aptos (already wired behind a flag) and add withdrawals to any chain through NEAR Intents.
+4. **Private memory.** Encrypted, wallet-keyed chat memory as described in [`docs/private-advisor.md`](docs/private-advisor.md), replacing plain `localStorage`.
+5. **Fee to AI on chain.** Route the collected performance fee into the NEAR stake automatically instead of by hand.
+6. **Then a higher cap.** Multisig admin and an external audit before the 101 USDC demo limit goes up.
 
 ## 📅 Built before and built in the window
 
