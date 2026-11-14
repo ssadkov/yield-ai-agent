@@ -108,8 +108,12 @@ export function checkChatBody(raw: string, encryptAllFields: boolean): PolicyRes
   if (!body || typeof body !== "object") return deny(400, "Body must be an object");
   if (typeof body.model !== "string" || !MODELS.has(body.model)) return deny(403, "Model not allowed");
 
-  const maxTokens = body.max_tokens ?? body.max_completion_tokens;
-  if (typeof maxTokens !== "number" || !Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > MAX_OUTPUT_TOKENS) {
+  // Both spellings of the output cap are checked: an upstream that prefers `max_completion_tokens`
+  // must not get a large value hidden behind a small `max_tokens`.
+  const caps = [body.max_tokens, body.max_completion_tokens].filter((value) => value !== undefined);
+  const capOk = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_OUTPUT_TOKENS;
+  if (caps.length === 0 || !caps.every(capOk)) {
     return deny(400, `max_tokens must be 1..${MAX_OUTPUT_TOKENS}`);
   }
   if (body.n !== undefined && body.n !== 1) return deny(400, "n must be 1");
@@ -149,6 +153,12 @@ export function checkChatBody(raw: string, encryptAllFields: boolean): PolicyRes
     }
   }
   return ok;
+}
+
+/** The largest output cap in a chat body that passed `checkChatBody`, for the cost reserve. */
+export function outputTokenCap(body: { max_tokens?: unknown; max_completion_tokens?: unknown }): number {
+  const caps = [body.max_tokens, body.max_completion_tokens].filter((value): value is number => typeof value === "number");
+  return caps.length > 0 ? Math.max(...caps) : MAX_OUTPUT_TOKENS;
 }
 
 export const IMAGE_SIZES: ReadonlySet<string> = new Set(["512x512", "1024x1024"]);

@@ -8,7 +8,7 @@
  *
  * The API returns an unsigned v0 transaction. Before the wallet sees it, `checkPlanTransaction`
  * requires: the owner is the only signer and the fee payer; every instruction belongs to the
- * Compute Budget or the Safe program; the Safe instructions are exactly the expected ones; the
+ * Compute Budget or the Safe program; the priority fee is at most 0.01 SOL; the Safe instructions are exactly the expected ones; the
  * amount is the one the user typed; a new Safe gets the reviewed executor. No executor key is
  * involved: the owner signs, and the program takes its performance fee on any Kamino exit.
  */
@@ -161,6 +161,38 @@ function readU64(data: Uint8Array, offset: number): bigint {
   return Buffer.from(data).readBigUInt64LE(offset);
 }
 
+/** The most a plan may add to the network fee as a priority fee: 0.01 SOL. Plans today add none. */
+export const MAX_PRIORITY_FEE_LAMPORTS = BigInt(10_000_000);
+const MAX_COMPUTE_UNITS = BigInt(1_400_000);
+
+/**
+ * Compute Budget instructions decide what the owner pays on top of the base fee:
+ * compute units x price. Without a ceiling, a plan made only of allowed instructions could still
+ * spend the wallet's SOL on fees. Instruction tags: 1 heap size, 2 unit limit (u32),
+ * 3 unit price (u64, micro-lamports per unit), 4 loaded-accounts data size.
+ */
+function checkPriorityFee(instructions: Uint8Array[]): void {
+  let units = MAX_COMPUTE_UNITS;
+  let microLamportsPerUnit = BigInt(0);
+  for (const data of instructions) {
+    const tag = data[0];
+    if (tag === 2 && data.length === 5) {
+      const requested = BigInt(Buffer.from(data).readUInt32LE(1));
+      units = requested < MAX_COMPUTE_UNITS ? requested : MAX_COMPUTE_UNITS;
+    } else if (tag === 3 && data.length === 9) {
+      microLamportsPerUnit = readU64(data, 1);
+    } else if (!((tag === 1 || tag === 4) && data.length === 5)) {
+      throw new PlanCheckError("Unknown Compute Budget instruction in the plan.");
+    }
+  }
+  const feeLamports = (units * microLamportsPerUnit + BigInt(999_999)) / BigInt(1_000_000);
+  if (feeLamports > MAX_PRIORITY_FEE_LAMPORTS) {
+    throw new PlanCheckError(
+      `The plan sets a priority fee of ${Number(feeLamports) / 1e9} SOL, above the ${Number(MAX_PRIORITY_FEE_LAMPORTS) / 1e9} SOL this app accepts.`
+    );
+  }
+}
+
 /**
  * Deserialize and check a plan transaction against what the user asked for.
  * `amountRaw` is the USDC amount in base units for deposits; omit it for `create_safe`.
@@ -177,10 +209,14 @@ export function checkPlanTransaction(
   }
 
   const safeCalls: { name: SafeInstruction; data: Uint8Array }[] = [];
+  const budget: Uint8Array[] = [];
   for (const ix of message.compiledInstructions) {
     const program = keys[ix.programIdIndex];
     if (!program) throw new PlanCheckError("Instruction program is not a static account.");
-    if (program.equals(ComputeBudgetProgram.programId)) continue;
+    if (program.equals(ComputeBudgetProgram.programId)) {
+      budget.push(ix.data);
+      continue;
+    }
     if (program.equals(ASSOCIATED_TOKEN_PROGRAM_ID)) {
       const allowed = allowedAccounts(expected.kind, expected.owner, expected.treasury);
       if (allowed.length === 0) throw new PlanCheckError("This plan must not create token accounts.");
@@ -194,6 +230,8 @@ export function checkPlanTransaction(
     if (!name) throw new PlanCheckError("Unknown Safe instruction in the plan.");
     safeCalls.push({ name, data: ix.data });
   }
+
+  checkPriorityFee(budget);
 
   const wanted = EXPECTED[expected.kind];
   if (safeCalls.length !== wanted.length || safeCalls.some((call, i) => call.name !== wanted[i])) {

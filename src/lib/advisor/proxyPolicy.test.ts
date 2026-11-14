@@ -8,6 +8,7 @@ import {
   checkChatHeaders,
   checkImageBody,
   checkSignatureQuery,
+  outputTokenCap,
   resolveProxyRoute,
 } from "./proxyPolicy.ts";
 
@@ -119,4 +120,18 @@ test("image route: only the image model, an encrypted prompt, one picture, fixed
   assert.equal(checkImageBody(JSON.stringify({ ...good, user: "x" })).ok, false);
   // The image model may be attested but not used for chat.
   assert.equal(checkAttestationQuery(new URLSearchParams({ model: "black-forest-labs/FLUX.2-klein-4B", nonce: KEY })).ok, true);
+});
+
+test("the output cap cannot be raised through max_completion_tokens", () => {
+  // Either spelling alone is fine within the limit.
+  assert.equal(checkChatBody(chat({ max_tokens: undefined, max_completion_tokens: 900 }), true).ok, true);
+  // A small max_tokens must not hide a large max_completion_tokens (or the reverse).
+  assert.equal(checkChatBody(chat({ max_tokens: 1, max_completion_tokens: 100_000 }), true).ok, false);
+  assert.equal(checkChatBody(chat({ max_tokens: 100_000, max_completion_tokens: 1 }), true).ok, false);
+  assert.equal(checkChatBody(chat({ max_tokens: 900, max_completion_tokens: "100000" }), true).ok, false);
+  assert.equal(checkChatBody(chat({ max_tokens: 900, max_completion_tokens: null }), true).ok, false);
+  // The cost reserve uses the larger of the two.
+  assert.equal(outputTokenCap({ max_tokens: 100, max_completion_tokens: 900 }), 900);
+  assert.equal(outputTokenCap({ max_tokens: 700 }), 700);
+  assert.equal(outputTokenCap({}), MAX_OUTPUT_TOKENS);
 });

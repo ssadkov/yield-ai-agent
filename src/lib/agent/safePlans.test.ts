@@ -232,3 +232,36 @@ test("a first Kamino deposit may create the Safe's own share account, and nothin
   ]);
   assert.throws(() => checkPlanTransaction(wrongKind, { owner, kind: "deposit", amountRaw: amount }), PlanCheckError);
 });
+
+test("a plan cannot spend the wallet's SOL on a priority fee", () => {
+  const owner = Keypair.generate().publicKey;
+  const withBudget = (...budget: TransactionInstruction[]) => {
+    const message = new TransactionMessage({
+      payerKey: owner,
+      recentBlockhash: PublicKey.default.toBase58(),
+      instructions: [...budget, safeIx(owner, initData(REVIEWED_EXECUTOR))],
+    }).compileToV0Message();
+    return Buffer.from(new VersionedTransaction(message).serialize()).toString("base64");
+  };
+  const limit = ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 });
+  const price = (microLamports: number) => ComputeBudgetProgram.setComputeUnitPrice({ microLamports });
+  const check = (tx: string) => checkPlanTransaction(tx, { owner, kind: "create_safe" });
+
+  // 200,000 units x 50,000,000 micro-lamports = 0.01 SOL: the ceiling itself passes.
+  check(withBudget(limit, price(50_000_000)));
+  check(withBudget(limit));
+  check(withBudget());
+  // 200,000 units x 50,000,000,000,000 micro-lamports = 10,000 SOL in fees.
+  assert.throws(() => check(withBudget(limit, price(50_000_000_000_000))), /priority fee/);
+  assert.throws(() => check(withBudget(price(50_000_000_000_000), limit)), /priority fee/);
+  // Just above the ceiling, and a price with no unit limit (the network then allows up to 1.4M units).
+  assert.throws(() => check(withBudget(limit, price(50_000_006))), /priority fee/);
+  assert.throws(() => check(withBudget(price(8_000_000))), /priority fee/);
+  // The deprecated RequestUnits instruction carries its own extra fee.
+  const requestUnits = new TransactionInstruction({
+    programId: ComputeBudgetProgram.programId,
+    keys: [],
+    data: Buffer.from([0, 0x40, 0x0d, 0x03, 0, 0xff, 0xff, 0xff, 0xff]),
+  });
+  assert.throws(() => check(withBudget(requestUnits)), /Unknown Compute Budget instruction/);
+});

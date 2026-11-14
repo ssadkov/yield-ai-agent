@@ -6,13 +6,15 @@ import {
   checkChatHeaders,
   checkImageBody,
   checkSignatureQuery,
+  outputTokenCap,
   resolveProxyRoute,
 } from "@/lib/advisor/proxyPolicy";
 import { creditsEnabled, recordUsage, setUsageCost, setUsageTokens } from "@/lib/credits/db";
 import { estimateRequestUsd } from "@/lib/credits/ledger";
 import { openChatUnlocked, visitorTrial, walletBalance } from "@/lib/credits/service";
 import { TRIAL_CAP_REACHED, TRIAL_USED_UP, clientIp } from "@/lib/credits/trial";
-import { IMAGE_MODEL, IMAGE_PRICE_USD, UNCENSORED_MODEL } from "@/lib/advisor/models";
+import { UNCENSORED_MODEL } from "@/lib/advisor/models";
+import { billImage, gateImageRequest } from "@/lib/advisor/imageBilling";
 import { SESSION_HEADER, walletFromSession } from "@/lib/credits/session";
 
 /**
@@ -107,7 +109,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     const bodyCheck = checkChatBody(body, request.headers.get("x-encrypt-all-fields") === "true");
     if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
     if (creditsEnabled()) {
-      const parsed = JSON.parse(body) as { max_tokens?: number; model?: string };
+      const parsed = JSON.parse(body) as { max_tokens?: number; max_completion_tokens?: number; model?: string };
       billedModel = typeof parsed.model === "string" ? parsed.model : null;
       const uncensored = billedModel === UNCENSORED_MODEL;
       billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
@@ -137,7 +139,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
         billedWallet = trial.guest;
       }
       // Reserve at the model's output price ($/1M, NEAR AI 2026-11-12); the billed cost replaces it.
-      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200, uncensored ? 1.2 : 0.5);
+      estimatedUsd = estimateRequestUsd(outputTokenCap(parsed), uncensored ? 1.2 : 0.5);
     }
   } else if (route.kind === "image") {
     // One encrypted picture for a signed-in wallet that unlocked Open chat; never on the free trial.
@@ -147,21 +149,14 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     const bodyCheck = checkImageBody(body);
     if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
     if (creditsEnabled()) {
-      billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
-      if (!billedWallet) return refuse(401, "Connect a Solana wallet and sign once to create pictures.");
-      try {
-        const balance = await walletBalance(billedWallet);
-        if (balance.availableUsd < IMAGE_PRICE_USD) {
-          return refuse(402, `A picture costs $${IMAGE_PRICE_USD}. Top up AI credits to continue.`);
-        }
-      } catch {
-        return refuse(503, "Credit ledger unavailable");
-      }
-      if (!(await openChatUnlocked(billedWallet).catch(() => false))) {
-        return refuse(403, "Pictures unlock after a Safe deposit or a credits top-up.");
-      }
-      estimatedUsd = IMAGE_PRICE_USD;
-      billedModel = IMAGE_MODEL;
+      // The rules live in src/lib/advisor/imageBilling.ts (unit-tested).
+      const gate = await gateImageRequest(request.headers.get(SESSION_HEADER), {
+        walletFromSession,
+        walletBalance,
+        openChatUnlocked,
+      });
+      if (!gate.ok) return refuse(gate.status, gate.error);
+      billedWallet = gate.wallet;
     }
   } else {
     const queryCheck =
@@ -200,14 +195,11 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   out.set("cache-control", "no-store");
   let responseBody = upstream.body;
   if (route.kind === "image") {
-    // NEAR AI returns no billing id for pictures (only x-request-id, which /v1/billing/costs does
-    // not price), so the list price is recorded as the final cost.
-    const requestId = upstream.headers.get("x-request-id");
-    if (billedWallet && requestId && upstream.ok) {
-      const id = `img:${requestId}`;
-      await recordUsage(billedWallet, id, IMAGE_PRICE_USD, IMAGE_MODEL).catch(() => undefined);
-      await setUsageCost(id, IMAGE_PRICE_USD).catch(() => undefined);
-    }
+    // Charged at list price, once, and only when the model answered (imageBilling.ts).
+    await billImage(
+      { wallet: billedWallet, requestId: upstream.headers.get("x-request-id"), upstreamOk: upstream.ok },
+      { recordUsage, setUsageCost }
+    );
     return new NextResponse(responseBody, { status: upstream.status, headers: out });
   }
   if (billedWallet && inferenceId && upstream.ok) {

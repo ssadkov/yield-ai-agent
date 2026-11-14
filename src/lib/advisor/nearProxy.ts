@@ -33,6 +33,7 @@ export type AttestedModel = {
 };
 
 import { latestImagesOnly, type ContentPart } from "./images.ts";
+import { refusalMessage } from "./refusals.ts";
 export type { ContentPart };
 
 export type ChatMessage =
@@ -250,17 +251,8 @@ export async function streamChatCompletion(options: {
   });
 
   if (!response.ok || !response.body) {
-    const detail = await response.text().catch(() => "");
-    // Our proxy's own refusals (sign in, out of credits, trial used up) are written for people.
-    if ([401, 402, 403, 429].includes(response.status)) {
-      try {
-        const refusal = (JSON.parse(detail) as { error?: unknown }).error;
-        if (typeof refusal === "string" && refusal) throw new Error(refusal);
-      } catch (error) {
-        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
-      }
-    }
-    throw new Error(`Chat HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`);
+    // The proxy's own refusals are written for people; the rest gets a plain sentence (refusals.ts).
+    throw new Error(refusalMessage(response.status, await response.text().catch(() => ""), "Chat"));
   }
 
   const inferenceId = response.headers.get("inference-id");
@@ -393,18 +385,6 @@ export async function verifyAnswer(attested: AttestedModel, evidence: Completion
   }
 }
 
-/** What the proxy says when it refuses (sign in, credits, unlock): written for people. */
-async function refusalOrHttp(response: Response, what: string): Promise<Error> {
-  const detail = await response.text().catch(() => "");
-  try {
-    const refusal = (JSON.parse(detail) as { error?: unknown }).error;
-    if (typeof refusal === "string" && refusal) return new Error(refusal);
-  } catch {
-    /* not JSON */
-  }
-  return new Error(`${what} HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`);
-}
-
 /**
  * One picture from the attested image model, end to end encrypted: the prompt is encrypted here to
  * the model's key, and the picture (and the model's revised prompt) come back encrypted to this
@@ -434,7 +414,7 @@ export async function generateImage(options: {
       response_format: "b64_json",
     }),
   });
-  if (!response.ok) throw await refusalOrHttp(response, "Picture");
+  if (!response.ok) throw new Error(refusalMessage(response.status, await response.text().catch(() => ""), "Picture"));
   const json = (await response.json()) as { data?: { b64_json?: string; revised_prompt?: string }[] };
   const item = json.data?.[0];
   if (!item?.b64_json) throw new Error("The image model returned no picture.");
