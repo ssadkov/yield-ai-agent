@@ -213,7 +213,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
                 aria-label="Where free AI comes from"
                 title="Where free AI comes from"
                 onClick={() => setShowPool((v) => !v)}
-                className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10.5px] text-muted-foreground align-middle hover:text-foreground"
+                className="tap-target ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10.5px] text-muted-foreground align-middle hover:text-foreground"
               >
                 i
               </button>

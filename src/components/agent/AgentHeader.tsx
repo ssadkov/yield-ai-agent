@@ -113,7 +113,7 @@ export function AgentHeader({
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
                 onClick={() => setMenuOpen((open) => !open)}
-                className="inline-flex h-9 max-w-[9.5rem] items-center gap-1.5 rounded-full border border-border/80 bg-surface px-2.5 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-none sm:gap-2 sm:px-3.5"
+                className="tap-target inline-flex h-9 max-w-[9.5rem] items-center gap-1.5 rounded-full border border-border/80 bg-surface px-2.5 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-none sm:gap-2 sm:px-3.5"
               >
                 {walletIcon ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -195,7 +195,7 @@ export function AgentHeader({
                 type="button"
                 disabled={pending}
                 onClick={onConnectSolana}
-                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground shadow-[0_0_28px_-8px_var(--glow)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 sm:px-4"
+                className="tap-target inline-flex h-9 items-center justify-center rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground shadow-[0_0_28px_-8px_var(--glow)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 sm:px-4"
               >
                 {pending ? "Connecting…" : <span className="sm:hidden">Connect</span>}
                 {pending ? null : <span className="hidden sm:inline">Connect Wallet</span>}

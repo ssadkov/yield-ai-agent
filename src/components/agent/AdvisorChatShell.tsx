@@ -133,7 +133,7 @@ function PrivateBadge({
           show();
         }}
         className={[
-          "inline-flex h-7 items-center rounded-full border px-2.5 text-[12.5px] font-medium tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "tap-target inline-flex h-7 items-center rounded-full border px-2.5 text-[12.5px] font-medium tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           verified
             ? "border-emerald-500/45 bg-white text-emerald-600 hover:bg-emerald-50 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-300 dark:hover:bg-emerald-400/15"
             : "border-emerald-500/35 bg-white text-emerald-600/80 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300/80",
@@ -457,7 +457,7 @@ export function AdvisorChatShell() {
               title="Clear chat"
               disabled={busy}
               onClick={clearHistory}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="tap-target inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
                 <path
@@ -615,7 +615,7 @@ export function AdvisorChatShell() {
                     type="button"
                     aria-label="Remove picture"
                     onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                    className="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[12px] text-background"
+                    className="tap-target absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[12px] text-background"
                   >
                     ×
                   </button>
@@ -664,7 +664,7 @@ export function AdvisorChatShell() {
                 onClick={() => fileRef.current?.click()}
                 aria-label="Attach a picture"
                 title="Attach a picture (encrypted like your text)"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/80 text-foreground/80 hover:bg-muted disabled:opacity-40"
+                className="tap-target inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/80 text-foreground/80 hover:bg-muted disabled:opacity-40"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
                   <path
@@ -700,7 +700,7 @@ export function AdvisorChatShell() {
                 type="submit"
                 disabled={!input.trim() && attachments.length === 0}
                 aria-label="Send message"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-40"
+                className="tap-target inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-40"
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" aria-hidden>
                   <path
