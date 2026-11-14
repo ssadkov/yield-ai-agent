@@ -194,7 +194,7 @@ What was written in the window is the path from a chat answer to a signature ([`
 1. The model calls `propose_plan` or `show_action_card`. The browser validates the arguments in code: the strategy must be on the allowlist (today only `solana:kamino_usdc`), the amount must be within limits.
 2. The Safe API builds an unsigned transaction.
 3. `checkPlanTransaction` deserializes it before the wallet sees it and requires:
-   - the owner is the only signer and the fee payer;
+   - the owner is the only signer and the fee payer, and the priority fee is at most 0.01 SOL;
    - every instruction belongs to the Compute Budget program, the Safe program, or is the idempotent creation of one expected token account;
    - the Safe instructions are exactly the expected sequence for this action (for example `set_allocation, deposit, kamino_deposit, set_allocation`);
    - the amount equals the amount the user typed;

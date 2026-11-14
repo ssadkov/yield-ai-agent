@@ -6,6 +6,7 @@ import {
   checkChatHeaders,
   checkImageBody,
   checkSignatureQuery,
+  outputTokenCap,
   resolveProxyRoute,
 } from "@/lib/advisor/proxyPolicy";
 import { creditsEnabled, recordUsage, setUsageCost, setUsageTokens } from "@/lib/credits/db";
@@ -108,7 +109,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     const bodyCheck = checkChatBody(body, request.headers.get("x-encrypt-all-fields") === "true");
     if (!bodyCheck.ok) return refuse(bodyCheck.status, bodyCheck.error);
     if (creditsEnabled()) {
-      const parsed = JSON.parse(body) as { max_tokens?: number; model?: string };
+      const parsed = JSON.parse(body) as { max_tokens?: number; max_completion_tokens?: number; model?: string };
       billedModel = typeof parsed.model === "string" ? parsed.model : null;
       const uncensored = billedModel === UNCENSORED_MODEL;
       billedWallet = walletFromSession(request.headers.get(SESSION_HEADER));
@@ -138,7 +139,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
         billedWallet = trial.guest;
       }
       // Reserve at the model's output price ($/1M, NEAR AI 2026-11-12); the billed cost replaces it.
-      estimatedUsd = estimateRequestUsd(parsed.max_tokens ?? 1200, uncensored ? 1.2 : 0.5);
+      estimatedUsd = estimateRequestUsd(outputTokenCap(parsed), uncensored ? 1.2 : 0.5);
     }
   } else if (route.kind === "image") {
     // One encrypted picture for a signed-in wallet that unlocked Open chat; never on the free trial.
