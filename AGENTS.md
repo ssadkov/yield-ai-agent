@@ -17,6 +17,8 @@ Intents 1-Click. The Safe program's performance fee on Kamino gains funds the us
 | Question | File |
 |---|---|
 | Attestation, E2EE, answer signatures | `src/lib/advisor/nearProxy.ts`, `src/lib/advisor/e2ee.ts` |
+| Which deployment an enclave must run (NEAR's launcher, published files) | `src/lib/advisor/nearDeployment.ts` |
+| Sign-in (Sign In With Solana, the browser builds the text) | `src/lib/credits/siws.ts`, `src/lib/credits/session.ts` |
 | What the proxy lets through | `src/lib/advisor/proxyPolicy.ts`, `src/app/api/near/[...path]/route.ts` |
 | Advisor rules and tools | `src/lib/advisor/knowledge.ts`, `src/lib/advisor/tools.ts`, `src/lib/advisor/runTurn.ts` |
 | The plan checker (agent wallet limits) | `src/lib/agent/safePlans.ts` (`checkPlanTransaction`) |

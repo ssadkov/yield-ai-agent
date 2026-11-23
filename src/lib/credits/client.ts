@@ -3,6 +3,8 @@
  * The session token only proves which wallet is chatting; it carries no funds or keys.
  */
 
+import { signInFieldsError, signInMessage, type SignInFields } from "./siws.ts";
+
 export const SESSION_HEADER = "x-advisor-session";
 const STORAGE_KEY = "agent.advisor.session.v1";
 const API = "/agent/api";
@@ -34,7 +36,11 @@ export function sessionHeaders(): Record<string, string> {
   return session ? { [SESSION_HEADER]: session.token } : {};
 }
 
-/** Ask the wallet to sign the server's challenge; store the session on success. */
+/**
+ * Sign in with the wallet; store the session on success.
+ * The server sends fields, and this browser builds the Sign In With Solana text from them after
+ * checking they name this wallet and this page. It never signs text it was sent.
+ */
 export async function signIn(
   wallet: string,
   signMessage: (message: Uint8Array) => Promise<Uint8Array>
@@ -46,20 +52,24 @@ export async function signIn(
     body: JSON.stringify({ wallet, host }),
     cache: "no-store",
   });
-  const challenge = (await challengeResponse.json()) as {
-    message?: string;
-    nonce?: string;
-    expiresAt?: number;
-    tag?: string;
-    error?: string;
+  const challenge = (await challengeResponse.json()) as Partial<SignInFields> & { tag?: string; error?: string };
+  if (!challengeResponse.ok) throw new Error(challenge.error ?? "Sign-in unavailable");
+  const fields: SignInFields = {
+    domain: host,
+    wallet,
+    nonce: String(challenge.nonce ?? ""),
+    issuedAt: Number(challenge.issuedAt),
+    expiresAt: Number(challenge.expiresAt),
   };
-  if (!challengeResponse.ok || !challenge.message) throw new Error(challenge.error ?? "Sign-in unavailable");
-  const signature = await signMessage(new TextEncoder().encode(challenge.message));
+  if (challenge.wallet !== wallet || challenge.domain !== host) throw new Error("Sign-in challenge is for another wallet or site");
+  const fieldError = signInFieldsError(fields);
+  if (fieldError) throw new Error(fieldError);
+  const signature = await signMessage(new TextEncoder().encode(signInMessage(fields)));
   const signatureB64 = btoa(String.fromCharCode(...signature));
   const sessionResponse = await fetch(`${API}/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ wallet, host, nonce: challenge.nonce, expiresAt: challenge.expiresAt, tag: challenge.tag, signature: signatureB64 }),
+    body: JSON.stringify({ ...fields, host, tag: challenge.tag, signature: signatureB64 }),
     cache: "no-store",
   });
   const session = (await sessionResponse.json()) as StoredSession & { error?: string };

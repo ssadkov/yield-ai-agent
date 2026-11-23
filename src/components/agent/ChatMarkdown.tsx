@@ -14,6 +14,10 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Never load a picture the model names: its URL could carry the conversation to another
+          // server without a click (a prompt-injection exfiltration channel). Pictures the model
+          // draws arrive as decrypted data URLs and are rendered outside Markdown.
+          img: ({ alt }) => <span className="text-muted-foreground">[picture link removed{alt?.trim() ? `: ${alt.trim()}` : ""}]</span>,
           p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
           em: ({ children }) => <em className="italic text-foreground/85">{children}</em>,
