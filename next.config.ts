@@ -25,6 +25,22 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async headers() {
+    // Pictures only from this app, data and blob URLs: a reply cannot make the browser fetch an
+    // outside URL through an image (ChatMarkdown also drops Markdown images). Every picture the app
+    // shows is local (/agent/tokens), a wallet icon data URL, or a decrypted data URL.
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return {
       beforeFiles: [

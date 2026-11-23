@@ -6,7 +6,7 @@
 
 ### Your yield pays for your private AI.
 
-A chat advisor that nobody but you can read 🔒, an on-chain account that earns on your USDC 💸,<br>
+A chat advisor that only you and a verified NEAR AI enclave can read 🔒, an on-chain account that earns on your USDC 💸,<br>
 and a meter that turns the fee on what you earn into AI credits ⚡
 
 [![Live demo](https://img.shields.io/badge/live_demo-yieldai.app%2Fagent-34d399?style=for-the-badge)](https://yieldai.app/agent)
@@ -51,7 +51,7 @@ On top of that, good private inference is not free, and a subscription is one mo
 
 ## 🧩 What this is
 
-- **A private chat.** Your browser verifies the model's TEE attestation, then encrypts every message to a key that only exists inside that enclave on NEAR AI Cloud. Our server forwards ciphertext and adds the API key. It cannot read the conversation, and neither can we.
+- **A private chat.** Your browser verifies the model's TEE attestation, then encrypts every message to a key that only exists inside that enclave on NEAR AI Cloud. Our server forwards ciphertext and adds the API key. The browser also checks that the enclave runs NEAR AI's own published setup, so a machine we (or anyone) rented with other code would not get the key.
 - **An account that earns.** A Solana Safe (program [`yie1Jjq6…`](https://solscan.io/account/yie1Jjq6y3rjsiGkgMYnwTveSgpSrSh4n41JHRNyBih)) that only your wallet can move funds out of. It puts USDC into Kamino. You can fund it from 10 networks through NEAR Intents.
 - **An agent that proposes and never signs.** The model reads live rates and your balances through tools and proposes a plan. The browser checks every transaction byte by byte against what you asked for before your wallet sees it.
 - **AI that the yield pays for.** The Safe program takes a performance fee on Kamino gains only (2000 bps on chain, read on 2026-11-13). That fee is your AI budget. Everyone also gets a small free allowance, and credits can be bought with any listed token.
@@ -149,10 +149,11 @@ sequenceDiagram
 
 All of this runs in the browser; code in [`src/lib/advisor`](src/lib/advisor).
 
-1. **Attestation before anything is sent** ([`nearProxy.ts`](src/lib/advisor/nearProxy.ts), `verifyModel`). The browser fetches the model's attestation with a fresh 32-byte nonce and verifies it with `@nearai/inference-sdk`: the Intel TDX quote and TCB status, the report data that binds our nonce to the model's signing key, the RTMR3 event log, MRCONFIGID, and NVIDIA GPU evidence when the enclave provides it. Every attestation must pass and they must agree on one key. If verification fails, nothing is sent to that model.
-2. **End-to-end encryption** ([`e2ee.ts`](src/lib/advisor/e2ee.ts)). NEAR AI's E2EE v2: an ephemeral X25519 key, ECDH with the attested model key, HKDF-SHA256, XChaCha20-Poly1305. Messages, attached pictures, tool definitions, tool calls and tool results are each encrypted (`X-Encrypt-All-Fields: true`). The reply is encrypted to a key generated in the browser for that session; a field that does not decrypt discards the whole answer.
-3. **A signature check on every answer** (`verifyAnswer`). After each reply the browser fetches NEAR's signature over the exact request and response bytes and checks that the signer is the one from the attestation it verified.
-4. **A blind proxy** ([`src/app/api/near/[...path]/route.ts`](src/app/api/near/[...path]/route.ts), [`proxyPolicy.ts`](src/lib/advisor/proxyPolicy.ts)). The server holds the NEAR AI API key and nothing else. It forwards only: E2EE chat to three whitelisted models, E2EE picture requests to one, attestation reports, and response signatures. It rejects plaintext content, other models, platform tools, more than 1,200 output tokens and oversized bodies. It does not log bodies.
+1. **Attestation before anything is sent** ([`nearProxy.ts`](src/lib/advisor/nearProxy.ts), `verifyModel`). The browser fetches the model's attestation with a fresh 32-byte nonce and verifies it with `@nearai/inference-sdk`: the Intel TDX quote and TCB status, the report data that binds our nonce to the model's signing key, the RTMR3 event log, MRCONFIGID, and NVIDIA GPU evidence, which is required. Every attestation must pass and they must agree on one key. If verification fails, nothing is sent to that model.
+2. **The deployment is NEAR AI's** ([`nearDeployment.ts`](src/lib/advisor/nearDeployment.ts)). Left to its defaults the SDK accepts any code on any genuine TDX machine, so whoever answers the attestation request (our own proxy included) could present a machine they rented. The browser therefore also requires the measured launcher configuration to be NEAR AI's launcher template (only the machine label, telemetry endpoint and dstack version may differ), the compose manager to be the image that template names, and every deployment file brought up since the manager started to be a file of [`nearai/cvm-compose-files`](https://github.com/nearai/cvm-compose-files) at the recorded commit with the recorded SHA-256 (fetched from GitHub by the browser). An unknown deployment gets nothing (`NEXT_PUBLIC_NEAR_DEPLOYMENT_CHECK=warn` lets it through with a warning, for the hours after NEAR updates its launcher).
+3. **End-to-end encryption** ([`e2ee.ts`](src/lib/advisor/e2ee.ts)). NEAR AI's E2EE v2: an ephemeral X25519 key, ECDH with the attested model key, HKDF-SHA256, XChaCha20-Poly1305. Messages, attached pictures, tool definitions, tool calls and tool results are each encrypted (`X-Encrypt-All-Fields: true`). The reply is encrypted to a key generated in the browser for that session; a field that does not decrypt discards the whole answer.
+4. **A signature check on every answer** (`verifyAnswer`). After each reply the browser fetches NEAR's signature over the exact request and response bytes and checks that the signer is the one from the attestation it verified.
+5. **A blind proxy** ([`src/app/api/near/[...path]/route.ts`](src/app/api/near/[...path]/route.ts), [`proxyPolicy.ts`](src/lib/advisor/proxyPolicy.ts)). The server holds the NEAR AI API key and nothing else. It forwards only: E2EE chat to three whitelisted models, E2EE picture requests to one, attestation reports, and response signatures. It rejects plaintext content, other models, platform tools, more than 1,200 output tokens and oversized bodies. It does not log bodies.
 
 | Model | Used for | Price on NEAR AI (2026-11-12 / 14) |
 |---|---|---|
@@ -205,7 +206,7 @@ What was written in the window is the path from a chat answer to a signature ([`
    - a new Safe gets the reviewed executor and an empty program allowlist.
 4. Only then is the wallet asked to sign.
 
-Tool results and anything the model reads are treated as data. A prompt injection can at most make the model propose a plan that this check rejects.
+Tool results and anything the model reads are treated as data. A prompt injection cannot get a transaction past this check. It could try to make the model write the conversation into a link or a picture URL: the chat never loads pictures named in a reply ([`ChatMarkdown.tsx`](src/components/agent/ChatMarkdown.tsx)) and the page's Content Security Policy allows images only from this app, so nothing leaves without a click.
 
 **Why this fits the `security` track: AI gets to move money without getting the keys.** Withdrawals go only to the owner's wallet (enforced by the program). The model's moves are limited to an allowlisted strategy and the amount the user typed (enforced by the browser before the wallet sees the transaction). And no prompt reaches a model whose TEE attestation the browser has not verified. Moving the allowlist and limits into the program is item 1 of [What's next](#-whats-next).
 
@@ -219,7 +220,7 @@ One balance in dollars of NEAR AI usage, spent in this order ([`ledger.ts`](src/
 
 Each request is first reserved at an upper bound and then replaced by the cost NEAR AI bills for that `inference-id`. Pictures are charged at list price. The ledger (Neon Postgres) stores wallets, NEAR AI request ids, token counts, costs and purchases. It stores no prompts and no answers.
 
-Sign-in is one Solana `signMessage` over a server challenge ([`session.ts`](src/lib/credits/session.ts)); it gates credits and Open chat, not privacy.
+Sign-in is one Solana `signMessage` over a Sign In With Solana message ([`siws.ts`](src/lib/credits/siws.ts), [`session.ts`](src/lib/credits/session.ts)); it gates credits and Open chat, not privacy. The server sends only a nonce and times, issues them only for yieldai.app, and the browser builds the text itself, so it never signs text the server chose. Wallets that check SIWS, such as Phantom, refuse it on any other site.
 
 There is no email, no card and no account. The only identifier is a wallet address, and credits are paid for in crypto through NEAR Intents, so paying for the AI does not attach a name to it. A wallet address is pseudonymous, not anonymous: deposits and purchases are visible on chain.
 
@@ -240,7 +241,10 @@ NEAR AI Cloud's gateway sees the same ciphertext. The plaintext exists in your b
 ## 🚧 Limitations
 
 - **Mainnet and real funds.** NEAR Intents has no testnet. Deposits are capped at 101 USDC while the Safe program has a single admin key.
-- **Trust assumptions.** Privacy rests on Intel TDX and NVIDIA attestation and on NEAR AI's SDK that verifies them. The SDK is patched to tolerate a 2-minute clock skew in NVIDIA's token ([`patches/`](patches)).
+- **Trust assumptions.** Privacy rests on Intel TDX and NVIDIA attestation and on NEAR AI's SDK that verifies them. The SDK is patched to tolerate a 2-minute clock skew in NVIDIA's token ([`patches/`](patches)). Physical attacks on TEEs (memory-bus interposers such as TEE.fail) are outside Intel's and NVIDIA's threat model.
+- **What the deployment check does not cover.** It pins NEAR AI's launcher and its published deployment files, not the builds of the model-serving images those files name (the SDK's provenance helper cannot read NEAR's compose files, which set images through YAML anchors, and some images there have no digest). It cannot tell a commit on NEAR's main branch from one in a fork of that repository. When NEAR AI updates its launcher, chat stops until its template is added (or the check is set to `warn`).
+- **The web app is code we serve.** The browser runs whatever JavaScript yieldai.app sends. The checks above protect against our server misbehaving at runtime, not against a malicious release of the app itself; the code is open and the build is from this repository.
+- **Sign-in relays.** Wallets that do not check SIWS domains still sign the message on any site, so a phishing page could obtain a 24-hour session (credits, Open chat; never funds or keys).
 - **Chat history is not encrypted at rest.** It sits in `localStorage` on your device. The encrypted, wallet-keyed memory described in [`docs/encrypted-memory.md`](docs/encrypted-memory.md) is not built.
 - **Generated pictures have no response-signature check.** The request is encrypted to the attested key and the picture decrypts only with the browser's key, but NEAR's per-answer signature is verified for chat only.
 - **One executable strategy.** Kamino USDC. Exponent fixed-rate PT is listed for comparison; the app cannot deposit into it.
@@ -320,6 +324,8 @@ With only `NEAR_AI_API_KEY` set, the private chat, attestation, the proof line, 
 | `NEAR_AI_API_KEY` | chat | Server only. Without it the proxy answers 503. |
 | `DATABASE_URL` | credits | Neon Postgres. Tables are created on first use. |
 | `SESSION_SECRET` | credits, trial | 32+ random characters. |
+| `SESSION_ALLOWED_HOSTS` | optional | Extra domains sign-in may name, comma-separated; yieldai.app always, preview URLs on Vercel previews, localhost outside production. |
+| `NEXT_PUBLIC_NEAR_DEPLOYMENT_CHECK` | optional | `enforce` (default) or `warn`: whether an enclave whose deployment is not NEAR AI's known one is refused or used with a warning. |
 | `CREDITS_RECEIVER` | buying credits | Solana address that receives USDC from 1-Click. |
 | `CREDITS_DESTINATION_ASSET` | optional | 1-Click asset id; default USDC on Solana. |
 | `ADVISOR_FREE_USD_PER_MONTH` | optional | Default `0.05`. |

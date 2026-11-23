@@ -76,6 +76,20 @@ export function AnswerProofLine({
                   The model runs in a sealed computer (an enclave) that its operator cannot look inside. Intel’s chip vouched for it.
                 </Check>
                 <Check
+                  ok={attestation.deployment.status === "pinned"}
+                  detail={
+                    attestation.deployment.status === "pinned"
+                      ? `NEAR AI launcher ${attestation.deployment.check.template.slice(0, 12)} · ${attestation.deployment.check.composeFiles
+                          .map((f) => `${f.file}@${f.commit.slice(0, 8)}`)
+                          .join(", ")}`
+                      : attestation.deployment.reason
+                  }
+                >
+                  {attestation.deployment.status === "pinned"
+                    ? "The enclave runs NEAR AI’s own setup: its known launcher and config files published in NEAR AI’s public repository. Someone else’s machine running their own code fails this check."
+                    : "This enclave’s setup is not one this app recognises. Treat the answer as unverified."}
+                </Check>
+                <Check
                   ok={attestation.gpuEvidence === "verified" ? true : null}
                   detail={attestation.gpuEvidence === "verified" ? "NVIDIA GPU evidence verified" : "No GPU evidence in this attestation"}
                 >

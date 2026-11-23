@@ -9,18 +9,56 @@ import { ADVISOR_MODELS, IMAGE_MODEL, type AttestableModel } from "@/lib/advisor
 import type { VerifiedModelAttestation } from "@nearai/inference-sdk";
 import { sessionHeaders } from "@/lib/credits/client";
 import { parseUsage, type TokenUsage } from "@/lib/advisor/usage";
+import { checkNearDeployment, DeploymentNotRecognised, type DeploymentCheck } from "@/lib/advisor/nearDeployment";
 
 const PROXY = "/agent/api/near";
+
+/**
+ * `enforce` (default): an enclave whose deployment is not NEAR's known one gets nothing.
+ * `warn`: it is used, and the proof panel says the deployment was not recognised. Only for the
+ * hours between a NEAR launcher update and adding its template to `nearDeployment.ts`.
+ */
+const DEPLOYMENT_CHECK: "enforce" | "warn" = process.env.NEXT_PUBLIC_NEAR_DEPLOYMENT_CHECK === "warn" ? "warn" : "enforce";
+const PROVEN_FILES_KEY = "agent.near.proven-deployment-files.v1";
+
+/** Deployment files already matched against NEAR's repository; immutable, so kept across reloads. */
+function provenFilesCache() {
+  let seen: Set<string>;
+  try {
+    seen = new Set(JSON.parse(window.localStorage.getItem(PROVEN_FILES_KEY) ?? "[]") as string[]);
+  } catch {
+    seen = new Set();
+  }
+  return {
+    has: (key: string) => seen.has(key),
+    add: (key: string) => {
+      seen.add(key);
+      try {
+        window.localStorage.setItem(PROVEN_FILES_KEY, JSON.stringify([...seen].slice(-200)));
+      } catch {
+        /* private mode: check again next time */
+      }
+    },
+  };
+}
+
+async function fetchText(url: string): Promise<string> {
+  const response = await fetch(url, { cache: "force-cache" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
 
 /** What the NEAR SDK verified before we encrypt anything to this model. */
 export type AttestationSummary = {
   /** Intel TDX quote verified; TCB status accepted by the SDK's default policy. */
   tcbStatus: string;
-  /** NVIDIA GPU evidence: verified, or the enclave did not provide any. */
+  /** NVIDIA GPU evidence is required, so a verified model always has it. */
   gpuEvidence: "verified" | "not_provided";
   /** Model signer bound to our nonce in the verified quote. */
   signingAddress: string;
   verifiedAt: number;
+  /** NEAR's launcher, manager and published deployment files (nearDeployment.ts), or not recognised in `warn` mode. */
+  deployment: { status: "pinned"; check: DeploymentCheck } | { status: "unrecognised"; reason: string };
 };
 
 export type AttestedModel = {
@@ -94,11 +132,31 @@ async function verifyModel(preferred: AttestableModel): Promise<AttestedModel> {
     if (fetched.attestations.length === 0) {
       throw new Error(`No NEAR attestation for ${preferred}`);
     }
+    // Without a deployment check the SDK accepts any code on any genuine TDX machine, including a
+    // machine rented by whoever answers the attestation request (our own proxy, for one).
+    const cache = provenFilesCache();
+    const deployments: AttestationSummary["deployment"][] = [];
     const verified = await Promise.all(
       fetched.attestations.map((attestation) =>
-        verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding })
+        verifyModelAttestation({
+          attestation,
+          clientBinding: fetched.clientBinding,
+          policy: { gpuEvidence: "required" },
+          verifiers: {
+            deployment: async (deployment) => {
+              try {
+                deployments.push({ status: "pinned", check: await checkNearDeployment(deployment, { fetchText, cache }) });
+              } catch (error) {
+                if (DEPLOYMENT_CHECK === "enforce" || !(error instanceof DeploymentNotRecognised)) throw error;
+                deployments.push({ status: "unrecognised", reason: error.message });
+              }
+            },
+          },
+        })
       )
     );
+    const unrecognised = deployments.find((d) => d.status === "unrecognised");
+    if (deployments.length !== verified.length) throw new Error("Deployment check did not run for every attestation");
     const keys = new Set(verified.map((v) => v.signingPublicKey).filter((k): k is string => Boolean(k)));
     if (keys.size !== 1) {
       throw new Error(`Attestation for ${preferred} has ${keys.size} distinct E2EE keys`);
@@ -114,6 +172,7 @@ async function verifyModel(preferred: AttestableModel): Promise<AttestedModel> {
         gpuEvidence: verified.every((v) => v.gpuEvidence === "verified") ? "verified" : "not_provided",
         signingAddress: first.signer.signingAddress,
         verifiedAt: Date.now(),
+        deployment: unrecognised ?? deployments[0],
       },
       verifiedAttestations: verified,
     };

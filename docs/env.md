@@ -29,6 +29,13 @@ Credits turn on when `DATABASE_URL` is set. Visitors without a wallet then get t
 | `CREDITS_RECEIVER` | The address 1-Click pays for bought credits (USDC on Solana by default). A separate wallet, not the program's admin or upgrade key. Without it buying is off; the free allowance still works. |
 | `CREDITS_DESTINATION_ASSET` | The asset received, as a 1-Click asset id; default USDC on Solana. |
 | `AI_POOL_NEAR_ACCOUNT`, `AI_POOL_PRODUCT_ID` | Whose NEAR AI stake the pool meter shows. |
+| `SESSION_ALLOWED_HOSTS` | Extra domains a sign-in may name, comma-separated. yieldai.app is always allowed, Vercel preview URLs on previews, localhost outside production. Any other domain gets 403, so a page elsewhere cannot obtain a challenge this server accepts. |
+
+## Deployment check
+
+| Variable | What it is |
+|---|---|
+| `NEXT_PUBLIC_NEAR_DEPLOYMENT_CHECK` | `enforce` (default): an enclave whose launcher or deployment files are not NEAR AI's known ones gets nothing. `warn`: it is used and the proof panel says the setup was not recognised. Use `warn` only between a NEAR launcher update and adding its template hash to `src/lib/advisor/nearDeployment.ts` (the error message names the hash). Build-time: redeploy after changing it. |
 
 ## Optional (from the main app, not about the private chat)
 

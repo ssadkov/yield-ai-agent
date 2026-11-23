@@ -49,7 +49,7 @@ import type { CreditsState } from "@/lib/credits/client";
 const VERIFICATION_CENTER_URL = "https://docs.near.ai/cloud/verification/verification-center";
 
 const PRIVATE_BRIEF =
-  "Private AI: messages are encrypted in this browser to the attested model before they leave. Our server only forwards the ciphertext and cannot read the conversation.";
+  "Private AI: messages are encrypted in this browser to a model enclave that runs NEAR AI’s published setup. Our server only forwards the ciphertext.";
 
 function PrivateBadge({
   attestation,
@@ -62,7 +62,7 @@ function PrivateBadge({
   const [pinned, setPinned] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
-  const verified = Boolean(attestation);
+  const verified = attestation?.deployment.status === "pinned";
   const gpu =
     attestation?.gpuEvidence === "verified" ? "NVIDIA GPU evidence verified" : "no GPU evidence provided";
 
@@ -139,7 +139,7 @@ function PrivateBadge({
             : "border-emerald-500/35 bg-white text-emerald-600/80 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300/80",
         ].join(" ")}
       >
-        {verified ? "Private · TEE ✓" : "Private"}
+        {verified ? "Private · TEE ✓" : attestation ? "TEE · setup unverified" : "Private"}
       </button>
       {open ? (
         <div
@@ -150,7 +150,8 @@ function PrivateBadge({
           <p className="text-[14px] leading-relaxed text-foreground/90">{PRIVATE_BRIEF}</p>
           {attestation ? (
             <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
-              {model ?? "Model"} · Intel TDX {attestation.tcbStatus} · {gpu}. Checked in this browser.
+              {model ?? "Model"} · Intel TDX {attestation.tcbStatus} · {gpu} ·{" "}
+              {attestation.deployment.status === "pinned" ? "NEAR AI’s published setup" : "setup not recognised"}. Checked in this browser.
             </p>
           ) : (
             <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
