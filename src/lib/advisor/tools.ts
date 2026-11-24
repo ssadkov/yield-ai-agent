@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { formatTxSummary, parseSignatureInput, type TxSummary } from "../agent/explainTx.ts";
 import { safeAddress } from "../agent/solanaSafe.ts";
-import { fetchAptosAgent, formatAptosAgentForTool, formatStrategyYieldsForTool } from "../agent/aptosAgent.ts";
+import { fetchAptosAgent, formatAptosAgentForTool } from "../agent/aptosAgent.ts";
 
 export const ADVISOR_TOOLS = [
   {
@@ -197,10 +197,9 @@ async function myAptosAgents(): Promise<string> {
 }
 
 async function aptosStrategyYields(): Promise<string> {
-  const response = await fetch("/api/protocols/yield-ai/strategy-yields", { cache: "no-store" });
-  if (response.status === 404) return "Live Aptos strategy yields are not published yet. Say the current APRs are shown on yieldai.app (AI agent → Create) and do not quote numbers.";
-  if (!response.ok) return `get_aptos_strategy_yields failed: HTTP ${response.status}`;
-  return formatStrategyYieldsForTool(await response.json().catch(() => null)) ?? "get_aptos_strategy_yields: unexpected answer";
+  const response = await fetch("/agent/api/aptos-strategy-yields?format=text", { cache: "no-store" });
+  if (!response.ok) return `get_aptos_strategy_yields failed: HTTP ${response.status}. Do not quote APRs; they are shown on yieldai.app (AI agent → Create).`;
+  return await response.text();
 }
 
 type AccountSummary = {

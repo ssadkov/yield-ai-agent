@@ -136,9 +136,12 @@ export function formatStrategyYieldsForTool(json: unknown): string | null {
   const lines = [
     `Yield AI agent strategies on Aptos, live as of ${str(data.updatedAt) ?? "unknown time"}. APR = protocol APR + Boost; neither is guaranteed.`,
     boost.enabled === true
-      ? `Boost: +${num(boost.rateAprPct)}% APR on eligible deposits (owner total from $${num(boost.minBalanceUsd)}); looped deposits get it on the supplied amount.`
-      : "Boost: not running now.",
+      ? `Boost: +${num(boost.rateAprPct)}% APR on eligible deposits (owner total from $${num(boost.minBalanceUsd)}), paid on own capital (supply minus borrow), so loop leverage does not multiply it. Loop base APR is on own capital at the shown leverage.`
+      : Array.isArray(data.missing) && data.missing.includes("Boost summary")
+        ? "Boost: rate unavailable right now (not included below)."
+        : "Boost: not running now.",
   ];
+  if (Array.isArray(data.missing) && data.missing.length) lines.push(`Unavailable right now, so their rows are n/a: ${data.missing.join(", ")}.`);
   for (const row of data.strategies as Record<string, unknown>[]) {
     const label = str(row.label) ?? STRATEGY_LABELS[str(row.id) ?? ""] ?? "Strategy";
     lines.push(`${label}: risk — ${str(row.risk) ?? "see yieldai.app"}`);
