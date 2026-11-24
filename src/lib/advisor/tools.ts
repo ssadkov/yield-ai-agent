@@ -2,6 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { formatTxSummary, parseSignatureInput, type TxSummary } from "../agent/explainTx.ts";
 import { safeAddress } from "../agent/solanaSafe.ts";
 import { fetchAptosAgent, formatAptosAgentForTool } from "../agent/aptosAgent.ts";
+import { fetchSafeHistory, fetchSafePaused, formatSafeHistoryForTool, validateAptosAction } from "../agent/aptosSafeOps.ts";
 
 export const ADVISOR_TOOLS = [
   {
@@ -24,6 +25,40 @@ export const ADVISOR_TOOLS = [
       description:
         "The user's Yield AI agents on Aptos (yieldai.app): each AI agent Safe with its strategy and USD balance, and their Yield AI Boost season state (eligible or not, shortfall to the minimum, Grain accrued, USDC paid). Call for any question about their Aptos agents, Aptos balance, Boost, Grain or payouts.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_aptos_agent_history",
+      description:
+        "History and earnings of the user's Aptos agents, per Safe: running or paused, deposited, withdrawn, Boost paid into the Safe, earned in $ and APR on average capital, and the last deposits/withdrawals. Call when the user asks how much they earned, their history, PnL, or whether an agent is running or paused.",
+      parameters: {
+        type: "object",
+        properties: {
+          safe: { type: "string", description: "Optional: one Safe, as get_my_aptos_agents printed it. Omit for all." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_aptos_action",
+      description:
+        "Show a card in the chat that the owner signs in their Aptos wallet (gas is sponsored): pause or resume one of their Aptos agents, or withdraw idle USDC, USD1 or USDt from its Safe to their wallet. Funds inside positions (loops, LP, delta-neutral) cannot be withdrawn here; that is on yieldai.app. Never say the action happened; the user signs it.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["pause", "resume", "withdraw"] },
+          safe: { type: "string", description: "The Safe, as get_my_aptos_agents printed it" },
+          token: { type: "string", enum: ["USDC", "USD1", "USDt"], description: "withdraw only; default USDC" },
+          amount: { type: "number", description: "withdraw only; omit for everything idle" },
+        },
+        required: ["action", "safe"],
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -196,6 +231,58 @@ async function myAptosAgents(): Promise<string> {
   }
 }
 
+async function aptosHistory(argsJson: string): Promise<string> {
+  if (!advisorAptosOwner) return "No Aptos account known. Ask the user to connect a wallet.";
+  let ref = "";
+  try {
+    ref = String((JSON.parse(argsJson || "{}") as { safe?: unknown }).safe ?? "");
+  } catch {
+    ref = "";
+  }
+  let state: Awaited<ReturnType<typeof fetchAptosAgent>>;
+  try {
+    state = await fetchAptosAgent(advisorAptosOwner);
+  } catch (error) {
+    return `get_aptos_agent_history failed: ${error instanceof Error ? error.message : "unavailable"}`;
+  }
+  if (!state || state.safes.length === 0) return formatAptosAgentForTool(state);
+  let safes = state.safes;
+  if (ref) {
+    const picked = validateAptosAction({ action: "pause", safe: ref }, safes);
+    if (!picked.ok) return picked.error;
+    safes = safes.filter((s) => s.safe === picked.card.safe);
+  }
+  const parts = await Promise.all(
+    safes.map(async (s) => {
+      const [history, paused] = await Promise.all([fetchSafeHistory(s.safe, s.balanceUsd).catch(() => null), fetchSafePaused(s.safe)]);
+      return formatSafeHistoryForTool(s.label, s.safe, s.balanceUsd, history, paused);
+    })
+  );
+  const b = state.boost;
+  parts.push(
+    `Boost for this owner: $${b.paidToDateUsd.toFixed(2)} paid in USDC to date, ${b.grainTotal.toFixed(2)} Grain accrued, last payout ${b.lastPayoutAt?.slice(0, 10) ?? "none yet"}. Value now is the Boost API's balance; earnings are value now minus net deposits.`
+  );
+  return parts.join("\n\n");
+}
+
+async function proposeAptosAction(argsJson: string): Promise<string> {
+  if (!advisorAptosOwner) return JSON.stringify({ ok: false, error: "No Aptos account connected." });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(argsJson || "{}");
+  } catch {
+    return JSON.stringify({ ok: false, error: "Invalid JSON arguments." });
+  }
+  const state = await fetchAptosAgent(advisorAptosOwner).catch(() => null);
+  const checked = validateAptosAction(parsed, state?.safes ?? []);
+  if (!checked.ok) return JSON.stringify(checked);
+  return JSON.stringify({
+    ok: true,
+    card: checked.card,
+    note: "The card is shown in the chat; the owner signs it in their wallet. Do not claim it happened.",
+  });
+}
+
 async function aptosStrategyYields(): Promise<string> {
   const response = await fetch("/agent/api/aptos-strategy-yields?format=text", { cache: "no-store" });
   if (!response.ok) return `get_aptos_strategy_yields failed: HTTP ${response.status}. Do not quote APRs; they are shown on yieldai.app (AI agent → Create).`;
@@ -276,6 +363,8 @@ export async function runAdvisorTool(name: string, argsJson: string, userText = 
   if (name === "get_my_account") return myAccount();
   if (name === "get_my_aptos_agents") return myAptosAgents();
   if (name === "get_aptos_strategy_yields") return aptosStrategyYields();
+  if (name === "get_aptos_agent_history") return aptosHistory(argsJson);
+  if (name === "propose_aptos_action") return proposeAptosAction(argsJson);
   if (name === "explain_transaction") return explainTransaction(argsJson, userText);
   if (name === "get_usdc_yields") {
     const response = await fetch("/agent/api/usdc-yields?format=text", { cache: "no-store" });

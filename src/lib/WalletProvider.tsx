@@ -3,9 +3,8 @@
 /**
  * Baseline from Yield AI `origin/main` (2026-11-02): `src/lib/WalletProvider.tsx`.
  *
- * Stage 1 drops two pieces of the original:
- * - Gas Station (`transactionSubmitter`) — needed only when creating a Safe.
- * - EVM derivation (`@aptos-labs/derived-wallet-ethereum`) — Solana first.
+ * Gas Station is the global `transactionSubmitter`, as on yieldai.app (owner pause, resume and
+ * withdraw from this page). EVM derivation (`@aptos-labs/derived-wallet-ethereum`) is left out.
  * Wallet errors are logged. The original showed a toast.
  */
 
@@ -14,6 +13,7 @@ import { setupAutomaticSolanaWalletDerivation } from "@aptos-labs/derived-wallet
 import { PropsWithChildren, useEffect, useState } from "react";
 import { Network } from "@aptos-labs/ts-sdk";
 import { derivedWalletChainFromName, isDerivedAptosWallet } from "./aptosWalletUtils";
+import { gasStationSubmitter } from "./agent/gasStation";
 
 function isBenignWalletError(error: unknown): boolean {
   const record = error as { name?: string; message?: string } | null;
@@ -85,6 +85,8 @@ export const WalletProvider = ({ children }: PropsWithChildren) => {
       dappConfig={{
         network: Network.MAINNET,
         crossChainWallets: true,
+        // Solana-derived accounts hold no APT; Gas Station pays, as on yieldai.app.
+        transactionSubmitter: gasStationSubmitter() ?? undefined,
       }}
       onError={(error) => {
         const message = typeof error === "string" ? error : (error?.message ?? "Unknown wallet error");

@@ -26,6 +26,7 @@ Credits turn on when `DATABASE_URL` is set. Visitors without a wallet then get t
 | `SESSION_SECRET` | A random string of 32+ characters. It signs the sign-in challenge, the session token and the trial's IP hash. Changing it signs everyone out. |
 | `ADVISOR_FREE_USD_PER_MONTH` | Free allowance per wallet per month from the AI pool, default `0.05`. |
 | `ADVISOR_BOOST_USD_PER_MONTH` | Monthly allowance for wallets earning Yield AI Boost on Aptos, default `1`; `0` turns it off. It replaces the free allowance for them, it is not added to it. |
+| `NEXT_PUBLIC_APTOS_GAS_STATION_KEY` | Aptos Gas Station key (the same one yieldai.app uses). It pays gas for the owner's pause, resume and withdraw on Aptos agent Safes signed on this page. Without it Petra pays its own gas and a Solana-derived Aptos account cannot send. Public by design: it ships to the browser. |
 | `YIELD_AI_API_ORIGIN` | Where the server reads Boost eligibility (`/api/campaigns/boost/account`), default `https://yieldai.app`. Answers are cached for ten minutes. |
 | `ADVISOR_TRIAL_REQUESTS_PER_DAY`, `ADVISOR_TRIAL_USD_PER_DAY` | The no-wallet trial: requests per visitor per day, and one daily cap for all visitors together. Defaults `10` and `0.1`. |
 | `CREDITS_RECEIVER` | The address 1-Click pays for bought credits (USDC on Solana by default). A separate wallet, not the program's admin or upgrade key. Without it buying is off; the free allowance still works. |

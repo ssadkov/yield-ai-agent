@@ -16,6 +16,9 @@ importers:
       '@aptos-labs/derived-wallet-solana':
         specifier: ^0.8.1
         version: 0.8.2(@aptos-labs/ts-sdk@5.2.1(got@11.8.6))(@wallet-standard/core@1.1.2)(bs58@6.0.0)(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@aptos-labs/gas-station-client':
+        specifier: ^2.0.3
+        version: 2.0.3(got@11.8.6)
       '@aptos-labs/ts-sdk':
         specifier: ^5.2.1
         version: 5.2.1(got@11.8.6)
@@ -138,6 +141,9 @@ packages:
     resolution: {integrity: sha512-155P3X6z7Elufh5N+e71aCVRFQ1UmK5py8Kf06lv6UhjWGWT6BL7Wej+OAyo0ql48DGGhzw5mhkIU4lULyW2AQ==}
     peerDependencies:
       '@aptos-labs/ts-sdk': ^5.1.1
+
+  '@aptos-labs/gas-station-client@2.0.3':
+    resolution: {integrity: sha512-zKy/gy6rHE9q9+58Oi+AjLukv1rGhVopAlBreil5TDvjVZvpIV4S05cXSRBVgo1UK7c+ClrXgKqCFgGn/q7udg==}
 
   '@aptos-labs/ts-sdk@5.2.1':
     resolution: {integrity: sha512-kazYjqfsPCBx2UJI+nYUOb6Ov7q7brSgYEfxp2sP27IeJWdDNa50lfs0WIpDJ92kQxdtlm9q3ZWw7Toh9f1gxQ==}
@@ -3174,6 +3180,12 @@ snapshots:
       - fastestsmallesttextencoderdecoder
       - typescript
       - utf-8-validate
+
+  '@aptos-labs/gas-station-client@2.0.3(got@11.8.6)':
+    dependencies:
+      '@aptos-labs/ts-sdk': 5.2.1(got@11.8.6)
+    transitivePeerDependencies:
+      - got
 
   '@aptos-labs/ts-sdk@5.2.1(got@11.8.6)':
     dependencies:

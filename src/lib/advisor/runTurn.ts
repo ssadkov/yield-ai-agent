@@ -19,6 +19,7 @@ import {
   type ActionCard,
   type ProposedPlan,
 } from "@/lib/advisor/tools";
+import type { AptosActionCard } from "@/lib/agent/aptosSafeOps";
 
 export type UiMessage = {
   id: string;
@@ -26,6 +27,8 @@ export type UiMessage = {
   content: string;
   plan?: ProposedPlan;
   actionCard?: ActionCard;
+  /** An Aptos pause, resume or withdraw the owner signs; this page only, not saved in history. */
+  aptosAction?: AptosActionCard;
   /** Response-signature check for this answer; checked in this browser, not restored from history. */
   proof?: AnswerProof;
   /** Pictures the user attached (data URLs); kept in memory only, not in saved history. */
@@ -71,6 +74,7 @@ export async function runAdvisorTurn(options: {
   assistantText: string;
   plan: ProposedPlan | null;
   actionCard: ActionCard | null;
+  aptosAction: AptosActionCard | null;
   model: string;
   /** NEAR AI `inference-id` of every completion in this turn, for cost metering. */
   inferenceIds: string[];
@@ -87,6 +91,7 @@ export async function runAdvisorTurn(options: {
       assistantText: "",
       plan: null,
       actionCard: null,
+      aptosAction: null,
       model: session.attested.model,
       inferenceIds: [],
       evidence: [],
@@ -112,6 +117,7 @@ export async function runAdvisorTurn(options: {
   const evidence: CompletionEvidence[] = [];
   let plan: ProposedPlan | null = null;
   let actionCard: ActionCard | null = null;
+  let aptosAction: AptosActionCard | null = null;
   let finalText = "";
 
   for (let step = 0; step < maxSteps; step += 1) {
@@ -167,6 +173,14 @@ export async function runAdvisorTurn(options: {
           /* ignore */
         }
       }
+      if (tc.name === "propose_aptos_action") {
+        try {
+          const parsed = JSON.parse(toolResult) as { ok?: boolean; card?: AptosActionCard };
+          if (parsed.ok && parsed.card) aptosAction = parsed.card;
+        } catch {
+          /* ignore */
+        }
+      }
       if (tc.name === "show_action_card") {
         try {
           const parsed = JSON.parse(toolResult) as { ok?: boolean; card?: ActionCard };
@@ -191,6 +205,7 @@ export async function runAdvisorTurn(options: {
     assistantText: finalText.replace(/^\n+/, "") || "I could not produce an answer.",
     plan,
     actionCard,
+    aptosAction,
     model: session.attested.model,
     inferenceIds,
     evidence,
@@ -200,7 +215,7 @@ export async function runAdvisorTurn(options: {
 export function makeUiMessage(
   role: "user" | "assistant",
   content: string,
-  extras?: { plan?: ProposedPlan; actionCard?: ActionCard }
+  extras?: { plan?: ProposedPlan; actionCard?: ActionCard; aptosAction?: AptosActionCard }
 ): UiMessage {
-  return { id: id(), role, content, plan: extras?.plan, actionCard: extras?.actionCard };
+  return { id: id(), role, content, plan: extras?.plan, actionCard: extras?.actionCard, aptosAction: extras?.aptosAction };
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionCard } from "@/components/agent/ActionCard";
+import { AptosActionCard } from "@/components/agent/AptosActionCard";
 import { ChatMarkdown } from "@/components/agent/ChatMarkdown";
 import {
   clearChatHistory,
@@ -250,6 +251,7 @@ export function AdvisorChatShell() {
       delete root.dataset.chatMode;
     };
   }, [mode, pictureMode]);
+  const [aptosOwner, setAptosOwner] = useState<string | null>(null);
   const onCreditsState = useCallback(
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []
@@ -269,6 +271,7 @@ export function AdvisorChatShell() {
       }
     }
     setAdvisorAptosOwner(owner);
+    setAptosOwner(owner);
   }, [credits.wallet]);
 
   const messages = histories[mode];
@@ -422,6 +425,7 @@ export function AdvisorChatShell() {
                 content: result.assistantText,
                 plan: result.plan ?? undefined,
                 actionCard: result.actionCard ?? undefined,
+                aptosAction: result.aptosAction ?? undefined,
                 ...(result.images?.length ? { images: result.images } : {}),
               }
             : message
@@ -521,7 +525,7 @@ export function AdvisorChatShell() {
         ) : null}
 
         {messages.map((message) => {
-          if (!message.content && !message.actionCard && !message.images?.length && message.role === "assistant") return null;
+          if (!message.content && !message.actionCard && !message.aptosAction && !message.images?.length && message.role === "assistant") return null;
           const isUser = message.role === "user";
           return (
             <div
@@ -574,6 +578,7 @@ export function AdvisorChatShell() {
                       </div>
                     ) : null}
                     {message.actionCard ? <ActionCard card={message.actionCard} /> : null}
+                    {message.aptosAction ? <AptosActionCard card={message.aptosAction} owner={aptosOwner} /> : null}
                     {message.proof || checking.has(message.id) ? (
                       <AnswerProofLine
                         proof={message.proof ?? "checking"}

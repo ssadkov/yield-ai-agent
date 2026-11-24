@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchAptosAgent, type AptosAgentState } from "@/lib/agent/aptosAgent";
+import { fetchAptosAgent, type AptosAgentSafe, type AptosAgentState } from "@/lib/agent/aptosAgent";
+import { fetchSafeHistory, fetchSafePaused, type SafeHistory } from "@/lib/agent/aptosSafeOps";
+import { AptosActionCard } from "@/components/agent/AptosActionCard";
 import { derivedAptosAddress, PRODUCTION_HOST } from "@/lib/agent/aptosDerived";
 
 const MAIN_APP = `https://${PRODUCTION_HOST}`;
@@ -31,7 +33,70 @@ export function boostOwnerFor(solanaAddress: string | null, aptosAddress: string
 
 type Load = { owner: string; state: AptosAgentState | null; error: string | null };
 
-/** The user's Yield AI agents on Aptos and their Boost season, read-only; managing happens on yieldai.app. */
+/** One Safe: strategy, value, running or paused, what it earned, and a Pause/Resume the owner signs. */
+function SafeRow({ safe, owner, version }: { safe: AptosAgentSafe; owner: string; version: number }) {
+  const [paused, setPaused] = useState<boolean | null>(null);
+  const [history, setHistory] = useState<SafeHistory | null>(null);
+  const [acting, setActing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchSafePaused(safe.safe).then((p) => active && setPaused(p));
+    fetchSafeHistory(safe.safe, safe.balanceUsd)
+      .then((h) => active && setHistory(h))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [safe.safe, safe.balanceUsd, version]);
+
+  const pnl = history?.pnl ?? null;
+  return (
+    <li className="py-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+            {safe.label}
+            {paused != null ? (
+              <span
+                className={`rounded-full px-1.5 py-px text-[10px] font-medium ${paused ? "bg-warning text-warning-foreground" : "bg-primary/15 text-primary"}`}
+              >
+                {paused ? "paused" : "running"}
+              </span>
+            ) : null}
+          </p>
+          <p className="font-mono text-[11px] text-muted-foreground" title={safe.safe}>
+            Safe {short(safe.safe)}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm tabular-nums">{usd(safe.balanceUsd)}</p>
+          {pnl != null ? (
+            <p className={`text-[11px] tabular-nums ${pnl < 0 ? "text-danger" : "text-primary"}`} title="Value now minus net deposits">
+              {pnl < 0 ? "−" : "+"}
+              {usd(Math.abs(pnl))}
+              {history?.aprPct != null ? ` · ${history.aprPct.toFixed(1)}%` : ""}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {paused != null ? (
+        <button
+          type="button"
+          onClick={() => setActing((v) => !v)}
+          className="mt-1 text-[11px] font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground"
+        >
+          {acting ? "Close" : paused ? "Resume agent" : "Pause agent"}
+        </button>
+      ) : null}
+      {acting && paused != null ? (
+        <AptosActionCard card={{ action: paused ? "resume" : "pause", safe: safe.safe, label: safe.label }} owner={owner} />
+      ) : null}
+    </li>
+  );
+}
+
+/** The user's Yield AI agents on Aptos and their Boost season. Pause and resume are signed here; the rest is on yieldai.app. */
 export function AptosAgentPanel({
   solanaAddress,
   aptosAddress,
@@ -43,6 +108,7 @@ export function AptosAgentPanel({
 }) {
   const owner = useMemo(() => boostOwnerFor(solanaAddress, aptosAddress, aptosIsDerived), [solanaAddress, aptosAddress, aptosIsDerived]);
   const [load, setLoad] = useState<Load | null>(null);
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     if (!owner) return;
@@ -53,9 +119,16 @@ export function AptosAgentPanel({
         .catch((error: unknown) => active && setLoad({ owner, state: null, error: error instanceof Error ? error.message : String(error) }));
     run();
     const timer = window.setInterval(run, 5 * 60_000);
+    // A pause, resume or withdraw signed in the chat or here: read the agents again.
+    const changed = () => {
+      run();
+      setVersion((v) => v + 1);
+    };
+    window.addEventListener("aptos-agents-changed", changed);
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.removeEventListener("aptos-agents-changed", changed);
     };
   }, [owner]);
 
@@ -95,15 +168,7 @@ export function AptosAgentPanel({
           <h3 className="mt-1 text-lg font-semibold tabular-nums">{usd(state.totalUsd)}</h3>
           <ul className="mt-2 divide-y divide-border">
             {state.safes.map((s) => (
-              <li key={s.safe} className="flex items-center justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{s.label}</p>
-                  <p className="font-mono text-[11px] text-muted-foreground" title={s.safe}>
-                    Safe {short(s.safe)}
-                  </p>
-                </div>
-                <span className="shrink-0 text-sm tabular-nums">{usd(s.balanceUsd)}</span>
-              </li>
+              <SafeRow key={s.safe} safe={s} owner={owner} version={version} />
             ))}
           </ul>
         </>
