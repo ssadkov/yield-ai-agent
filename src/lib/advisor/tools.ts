@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { formatTxSummary, parseSignatureInput, type TxSummary } from "../agent/explainTx.ts";
 import { safeAddress } from "../agent/solanaSafe.ts";
+import { fetchAptosAgent, formatAptosAgentForTool, formatStrategyYieldsForTool } from "../agent/aptosAgent.ts";
 
 export const ADVISOR_TOOLS = [
   {
@@ -14,6 +15,24 @@ export const ADVISOR_TOOLS = [
         properties: {},
         additionalProperties: false,
       },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_my_aptos_agents",
+      description:
+        "The user's Yield AI agents on Aptos (yieldai.app): each AI agent Safe with its strategy and USD balance, and their Yield AI Boost season state (eligible or not, shortfall to the minimum, Grain accrued, USDC paid). Call for any question about their Aptos agents, Aptos balance, Boost, Grain or payouts.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_aptos_strategy_yields",
+      description:
+        "Live APR of the Yield AI agent strategies on Aptos (Stablecoin compound, Echelon stable loop, Hyperion CLMM LP, Decibel delta-neutral): protocol APR, Boost APR and total per variant, with each strategy's risk. Call for any question about Aptos agent yields or which Aptos strategy to pick.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
   {
@@ -159,6 +178,31 @@ export function setAdvisorWallet(address: string | null) {
   advisorWallet = address;
 }
 
+/** The Aptos account Boost counts for this user (native Aptos wallet, or the one derived from Solana). */
+let advisorAptosOwner: string | null = null;
+
+export function setAdvisorAptosOwner(owner: string | null) {
+  advisorAptosOwner = owner;
+}
+
+async function myAptosAgents(): Promise<string> {
+  if (!advisorAptosOwner) {
+    return "No Aptos account known. Ask the user to connect a wallet (Connect, top right); an Aptos wallet such as Petra, or the Solana wallet they use on yieldai.app.";
+  }
+  try {
+    return formatAptosAgentForTool(await fetchAptosAgent(advisorAptosOwner));
+  } catch (error) {
+    return `get_my_aptos_agents failed: ${error instanceof Error ? error.message : "unavailable"}`;
+  }
+}
+
+async function aptosStrategyYields(): Promise<string> {
+  const response = await fetch("/api/protocols/yield-ai/strategy-yields", { cache: "no-store" });
+  if (response.status === 404) return "Live Aptos strategy yields are not published yet. Say the current APRs are shown on yieldai.app (AI agent → Create) and do not quote numbers.";
+  if (!response.ok) return `get_aptos_strategy_yields failed: HTTP ${response.status}`;
+  return formatStrategyYieldsForTool(await response.json().catch(() => null)) ?? "get_aptos_strategy_yields: unexpected answer";
+}
+
 type AccountSummary = {
   exists: boolean;
   safe: string | null;
@@ -175,7 +219,9 @@ const usdcText = (n: number) => String(Number(n.toFixed(6)));
 
 async function myAccount(): Promise<string> {
   if (!advisorWallet) {
-    return "No wallet connected. Ask the user to connect a Solana wallet (Connect, top right) to see their balance.";
+    return advisorAptosOwner
+      ? "No Solana wallet connected, so there is no Solana Safe to show. For the user's Aptos agents and Boost call get_my_aptos_agents."
+      : "No wallet connected. Ask the user to connect a wallet (Connect, top right) to see their balance.";
   }
   const response = await fetch(`/agent/api/safe-summary?owner=${encodeURIComponent(advisorWallet)}`, { cache: "no-store" });
   if (!response.ok) return `get_my_account failed: HTTP ${response.status}`;
@@ -229,6 +275,8 @@ async function explainTransaction(argsJson: string, userText: string): Promise<s
 /** `userText` is the user's latest message; only `explain_transaction` reads it. */
 export async function runAdvisorTool(name: string, argsJson: string, userText = ""): Promise<string> {
   if (name === "get_my_account") return myAccount();
+  if (name === "get_my_aptos_agents") return myAptosAgents();
+  if (name === "get_aptos_strategy_yields") return aptosStrategyYields();
   if (name === "explain_transaction") return explainTransaction(argsJson, userText);
   if (name === "get_usdc_yields") {
     const response = await fetch("/agent/api/usdc-yields?format=text", { cache: "no-store" });

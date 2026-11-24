@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/agent/ThemeToggle";
-import { SHOW_APTOS } from "@/lib/agent/features";
+import { SHOW_APTOS, SHOW_APTOS_CONNECT } from "@/lib/agent/features";
 
 function truncateAddress(address: string | null | undefined): string {
   if (!address) return "Unknown";
@@ -136,7 +136,7 @@ export function AgentHeader({
                         />
                       </div>
                     ) : null}
-                    {SHOW_APTOS && aptosAddress ? (
+                    {(SHOW_APTOS || (SHOW_APTOS_CONNECT && !solanaAddress)) && aptosAddress ? (
                       <div className="py-3">
                         <CopyRow label={`Aptos · ${aptosKind}`} value={aptosAddress} />
                       </div>
@@ -156,7 +156,7 @@ export function AgentHeader({
                         </button>
                       </div>
                     ) : null}
-                    {SHOW_APTOS && !aptosAddress ? (
+                    {SHOW_APTOS_CONNECT && !aptosAddress ? (
                       <div className="py-2">
                         <button
                           type="button"
@@ -200,7 +200,7 @@ export function AgentHeader({
                 {pending ? "Connecting…" : <span className="sm:hidden">Connect</span>}
                 {pending ? null : <span className="hidden sm:inline">Connect Wallet</span>}
               </button>
-              {SHOW_APTOS ? (
+              {SHOW_APTOS_CONNECT ? (
                 <button
                   type="button"
                   disabled={pending}

@@ -4,6 +4,7 @@
  */
 
 import { signInFieldsError, signInMessage, type SignInFields } from "./siws.ts";
+import { aptosSignInMessage, canonicalAptosAddress } from "./aptosSignIn.ts";
 
 export const SESSION_HEADER = "x-advisor-session";
 const STORAGE_KEY = "agent.advisor.session.v1";
@@ -72,6 +73,10 @@ export async function signIn(
     body: JSON.stringify({ ...fields, host, tag: challenge.tag, signature: signatureB64 }),
     cache: "no-store",
   });
+  return storeSession(sessionResponse);
+}
+
+async function storeSession(sessionResponse: Response): Promise<StoredSession> {
   const session = (await sessionResponse.json()) as StoredSession & { error?: string };
   if (!sessionResponse.ok || !session.token) throw new Error(session.error ?? "Sign-in failed");
   const stored = { wallet: session.wallet, token: session.token, expiresAt: session.expiresAt };
@@ -82,6 +87,61 @@ export async function signIn(
   }
   window.dispatchEvent(new Event("agent-session"));
   return stored;
+}
+
+export type AptosSignMessage = (input: {
+  message: string;
+  nonce: string;
+  address: boolean;
+  application: boolean;
+  chainId: boolean;
+}) => Promise<{ fullMessage: string; signature: unknown }>;
+
+function signatureHex(signature: unknown): string {
+  if (signature instanceof Uint8Array) return Array.from(signature, (b) => b.toString(16).padStart(2, "0")).join("");
+  if (typeof signature === "string") return signature.replace(/^0x/, "");
+  const withBytes = signature as { toUint8Array?: () => Uint8Array; toString?: () => string } | null;
+  if (withBytes?.toUint8Array) return signatureHex(withBytes.toUint8Array());
+  if (withBytes?.toString) return withBytes.toString().replace(/^0x/, "");
+  throw new Error("The wallet returned an unreadable signature");
+}
+
+/**
+ * Sign in with a native Aptos wallet (aptosSignIn.ts). As with Solana, this browser builds the text
+ * from the server's fields; the wallet adds the address and this page's origin before signing.
+ */
+export async function signInAptos(address: string, publicKey: string, signMessage: AptosSignMessage): Promise<StoredSession> {
+  const host = window.location.host;
+  const wallet = canonicalAptosAddress(address);
+  if (!wallet) throw new Error("Invalid Aptos address");
+  const challengeResponse = await fetch(`${API}/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chain: "aptos", wallet, host }),
+    cache: "no-store",
+  });
+  const challenge = (await challengeResponse.json()) as Partial<SignInFields> & { tag?: string; error?: string };
+  if (!challengeResponse.ok) throw new Error(challenge.error ?? "Sign-in unavailable");
+  if (challenge.wallet !== wallet || challenge.domain !== host) throw new Error("Sign-in challenge is for another wallet or site");
+  const fields = { domain: host, wallet, nonce: String(challenge.nonce ?? ""), issuedAt: Number(challenge.issuedAt), expiresAt: Number(challenge.expiresAt) };
+  const fieldError = signInFieldsError(fields);
+  if (fieldError) throw new Error(fieldError);
+  const signed = await signMessage({ message: aptosSignInMessage(fields), nonce: fields.nonce, address: true, application: true, chainId: true });
+  const sessionResponse = await fetch(`${API}/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...fields,
+      chain: "aptos",
+      host,
+      tag: challenge.tag,
+      fullMessage: signed.fullMessage,
+      signature: signatureHex(signed.signature),
+      publicKey: publicKey.replace(/^0x/, ""),
+    }),
+    cache: "no-store",
+  });
+  return storeSession(sessionResponse);
 }
 
 export type PaymentAsset = { id: string; label: string; chain: string; symbol: string; decimals: number };
@@ -105,6 +165,8 @@ export type CreditsState = {
   trial?: { requestsLeft: number; requestsPerDay: number } | null;
   /** Open chat is unlocked: USDC in the wallet's Safe or any credited purchase. */
   openChat?: boolean;
+  /** Yield AI Boost on Aptos for the signed-in wallet: eligible owners get `monthlyUsd` a month. */
+  boost?: { owner: string; eligible: boolean; monthlyUsd: number } | null;
   /** Requests, tokens and dollars, this UTC month and all time (tokens from the proxy's metering). */
   usage?: { month: UsageTotals; total: UsageTotals };
   /** NEAR AI public price of the primary advisor model, $ per 1M tokens. */

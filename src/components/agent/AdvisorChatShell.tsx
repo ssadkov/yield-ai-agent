@@ -17,7 +17,9 @@ import {
   type UiMessage,
 } from "@/lib/advisor/runTurn";
 import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
-import { setAdvisorWallet } from "@/lib/advisor/tools";
+import { setAdvisorAptosOwner, setAdvisorWallet } from "@/lib/advisor/tools";
+import { isAptosAddress } from "@/lib/agent/aptosAgent";
+import { derivedAptosAddress, PRODUCTION_HOST } from "@/lib/agent/aptosDerived";
 import {
   DEFAULT_ADVISOR_MODEL,
   IMAGE_MODEL,
@@ -252,8 +254,22 @@ export function AdvisorChatShell() {
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []
   );
-  // The advisor's get_my_account tool reads the connected wallet's Safe.
-  useEffect(() => setAdvisorWallet(credits.wallet), [credits.wallet]);
+  // get_my_account reads the Solana wallet's Safe; get_my_aptos_agents reads the Aptos account Boost
+  // counts: a native Aptos wallet itself, or the account a Solana wallet derives on yieldai.app.
+  useEffect(() => {
+    const wallet = credits.wallet;
+    const aptos = wallet && isAptosAddress(wallet);
+    setAdvisorWallet(wallet && !aptos ? wallet : null);
+    let owner: string | null = aptos ? wallet : null;
+    if (wallet && !aptos) {
+      try {
+        owner = derivedAptosAddress(wallet, PRODUCTION_HOST);
+      } catch {
+        owner = null;
+      }
+    }
+    setAdvisorAptosOwner(owner);
+  }, [credits.wallet]);
 
   const messages = histories[mode];
 

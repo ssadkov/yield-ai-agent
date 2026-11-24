@@ -329,6 +329,8 @@ With only `NEAR_AI_API_KEY` set, the private chat, attestation, the proof line, 
 | `CREDITS_RECEIVER` | buying credits | Solana address that receives USDC from 1-Click. |
 | `CREDITS_DESTINATION_ASSET` | optional | 1-Click asset id; default USDC on Solana. |
 | `ADVISOR_FREE_USD_PER_MONTH` | optional | Default `0.05`. |
+| `ADVISOR_BOOST_USD_PER_MONTH` | optional | Monthly allowance for Yield AI Boost participants on Aptos, default `1`. |
+| `YIELD_AI_API_ORIGIN` | optional | Where Boost eligibility is read; default `https://yieldai.app`. |
 | `ADVISOR_TRIAL_REQUESTS_PER_DAY`, `ADVISOR_TRIAL_USD_PER_DAY` | optional | Defaults `10` and `0.1`. |
 | `AI_POOL_NEAR_ACCOUNT`, `AI_POOL_PRODUCT_ID` | optional | Whose NEAR AI stake the pool meter reads. |
 | `SOLANA_RPC_URL` | optional | Default is the public mainnet RPC. |

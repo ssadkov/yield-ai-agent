@@ -7,7 +7,7 @@ import { AgentHeader } from "@/components/agent/AgentHeader";
 import { AdvisorChatShell } from "@/components/agent/AdvisorChatShell";
 import { WalletDialog } from "@/components/agent/WalletDialog";
 import { WalletSidePanel } from "@/components/agent/WalletSidePanel";
-import { SHOW_APTOS } from "@/lib/agent/features";
+import { SHOW_APTOS, SHOW_APTOS_CONNECT } from "@/lib/agent/features";
 
 type MobilePane = "chat" | "wallet";
 
@@ -29,7 +29,7 @@ export function AgentHome() {
   const nativeOnOtherHost = Boolean(session.aptosAddress) && session.derivedChain == null;
   // The host only changes the derived Aptos address; a Solana Safe is the same everywhere.
   const warnAboutHost = SHOW_APTOS && hostKnown && !onProduction && !nativeOnOtherHost;
-  const displayAddress = session.solanaAddress ?? (SHOW_APTOS ? session.aptosAddress : null);
+  const displayAddress = session.solanaAddress ?? (SHOW_APTOS_CONNECT ? session.aptosAddress : null);
 
   const closeDialog = session.closeDialog;
   /** Desktop left rail: only when there is session content or a host warning. */

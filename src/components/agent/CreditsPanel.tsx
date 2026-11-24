@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet as useAptosWallet } from "@aptos-labs/wallet-adapter-react";
+import { derivedWalletChainFromName, getDerivedWalletChainReliable } from "@/lib/aptosWalletUtils";
+import { canonicalAptosAddress } from "@/lib/credits/aptosSignIn";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import {
   fetchCredits,
@@ -9,6 +12,8 @@ import {
   purchaseStatus,
   requestPurchase,
   signIn,
+  signInAptos,
+  type AptosSignMessage,
   type CreditsState,
   type PurchaseQuote,
 } from "@/lib/credits/client";
@@ -37,7 +42,16 @@ function errorText(error: unknown): string {
  */
 export function CreditsPanel({ onState }: { onState?: (state: CreditsState | null, wallet: string | null) => void } = {}) {
   const { publicKey, connected, signMessage, sendTransaction } = useWallet();
-  const wallet = connected && publicKey ? publicKey.toBase58() : null;
+  const aptos = useAptosWallet();
+  const solanaWallet = connected && publicKey ? publicKey.toBase58() : null;
+  // Without a Solana wallet, a native Aptos wallet (Petra and others) signs in as itself. A derived
+  // Aptos account (Phantom through the Aptos adapter) signs in with its Solana wallet instead.
+  const aptosNative =
+    !solanaWallet && aptos.connected && aptos.account && aptos.wallet
+      ? !(getDerivedWalletChainReliable(aptos.wallet) ?? derivedWalletChainFromName(aptos.wallet.name))
+      : false;
+  const aptosWallet = aptosNative && aptos.account ? canonicalAptosAddress(String(aptos.account.address)) : null;
+  const wallet = solanaWallet ?? aptosWallet;
   const [state, setState] = useState<CreditsState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -98,11 +112,18 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
   };
 
   const doSignIn = async () => {
-    if (!wallet || !signMessage) return setError("This wallet cannot sign messages.");
+    if (!wallet) return setError("Connect a wallet first.");
     setBusy("signin");
     setError(null);
     try {
-      await signIn(wallet, signMessage);
+      if (solanaWallet) {
+        if (!signMessage) throw new Error("This wallet cannot sign messages.");
+        await signIn(solanaWallet, signMessage);
+      } else {
+        const publicKeyHex = String(aptos.account?.publicKey ?? "");
+        if (!publicKeyHex) throw new Error("This Aptos wallet did not share its public key.");
+        await signInAptos(wallet, publicKeyHex, aptos.signMessage as unknown as AptosSignMessage);
+      }
       refresh();
     } catch (err) {
       setError(errorText(err));
@@ -204,7 +225,9 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
               AI credits: <strong>{usd(balance?.availableUsd ?? 0)}</strong>
               <span className="text-muted-foreground">
                 {" "}
-                · free left {usd(balance?.freeLeftUsd ?? 0)} · from your Safe yield {usd(balance?.yieldLeftUsd ?? 0)} · bought{" "}
+                · free left {usd(balance?.freeLeftUsd ?? 0)}
+                {state.boost?.eligible ? ` (Boost: $${state.boost.monthlyUsd.toFixed(2)} a month)` : ""}
+                {solanaWallet ? ` · from your Safe yield ${usd(balance?.yieldLeftUsd ?? 0)}` : ""} · bought{" "}
                 {usd(Math.max(0, balance?.purchasedLeftUsd ?? 0))}
               </span>
               <button
@@ -218,7 +241,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
                 i
               </button>
             </span>
-            {state.purchasesEnabled ? (
+            {state.purchasesEnabled && solanaWallet ? (
               <button type="button" onClick={() => setOpen((v) => !v)} className="text-[12.5px] font-medium underline">
                 {open ? "Close" : "Top up with any token"}
               </button>

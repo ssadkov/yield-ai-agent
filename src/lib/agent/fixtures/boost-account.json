@@ -1,0 +1,86 @@
+{
+ "data": {
+  "campaignId": "big_boost_harvest",
+  "owner": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "campaignStart": "2026-09-07T00:00:00.000Z",
+  "started": true,
+  "eligible": true,
+  "reason": null,
+  "minBalanceUsd": 99,
+  "shortfallUsd": 0,
+  "early": false,
+  "rateAprPct": 3,
+  "balanceUsd": 1510.9005913378344,
+  "eligibleUsd": 1510.9005913378344,
+  "byAgent": [
+   {
+    "safe": "0x2222222222222222222222222222222222222222222222222222222222222222",
+    "strategy": "echelon_looping",
+    "balanceUsd": 1245.7985665762703,
+    "boostStatus": "open"
+   },
+   {
+    "safe": "0x3333333333333333333333333333333333333333333333333333333333333333",
+    "strategy": "hyperion_lp",
+    "balanceUsd": 261.6185905913971,
+    "boostStatus": "open"
+   },
+   {
+    "safe": "0x4444444444444444444444444444444444444444444444444444444444444444",
+    "strategy": "stablecoin_compound",
+    "balanceUsd": 2.31409992447924,
+    "boostStatus": "open"
+   },
+   {
+    "safe": "0x5555555555555555555555555555555555555555555555555555555555555555",
+    "strategy": "hyperion_lp",
+    "balanceUsd": 1.16933424568758,
+    "boostStatus": "open"
+   }
+  ],
+  "boostedUsd": 1510.9005913378344,
+  "unboostedUsd": 0,
+  "boostByAgentType": [
+   {
+    "strategy": "echelon_looping",
+    "status": "open",
+    "balanceUsd": 1245.7985665762703,
+    "boostedUsd": 1245.7985665762703,
+    "unboostedUsd": 0,
+    "allowanceUsd": null
+   },
+   {
+    "strategy": "hyperion_lp",
+    "status": "open",
+    "balanceUsd": 262.78792483708474,
+    "boostedUsd": 262.78792483708474,
+    "unboostedUsd": 0,
+    "allowanceUsd": null
+   },
+   {
+    "strategy": "stablecoin_compound",
+    "status": "open",
+    "balanceUsd": 2.31409992447924,
+    "boostedUsd": 2.31409992447924,
+    "unboostedUsd": 0,
+    "allowanceUsd": null
+   }
+  ],
+  "campaignBoostStatus": "open",
+  "campaignAllowanceUsd": null,
+  "limitStatuses": {},
+  "destinationSafe": "0x2222222222222222222222222222222222222222222222222222222222222222",
+  "grainTotal": 357.13975820689967,
+  "grainPerDay": 0.12418361024694527,
+  "paidToDate": 0,
+  "accruedUnpaid": 357.13975820689967,
+  "carriedUsd": 0.8815927301135514,
+  "minPayoutUsd": 1,
+  "hoursCounted": 1888,
+  "hoursBelowThreshold": 0,
+  "lastAccrualHour": "2026-11-24T19:00:00.000Z",
+  "lastPayoutAt": "2026-11-24T00:00:00.000Z",
+  "lastPayout": null
+ },
+ "note": "Shape of GET yieldai.app/api/campaigns/boost/account on 2026-11-25; addresses replaced."
+}
