@@ -165,8 +165,8 @@ export type CreditsState = {
   trial?: { requestsLeft: number; requestsPerDay: number } | null;
   /** Open chat is unlocked: USDC in the wallet's Safe or any credited purchase. */
   openChat?: boolean;
-  /** Yield AI Boost on Aptos for the signed-in wallet: eligible owners get `monthlyUsd` a month. */
-  boost?: { owner: string; eligible: boolean; monthlyUsd: number } | null;
+  /** Yield AI Boost on Aptos for the signed-in wallet: eligible owners get 30 days of their Grain a month. */
+  boost?: { owner: string; eligible: boolean; grainPerDay?: number; monthlyUsd: number } | null;
   /** Requests, tokens and dollars, this UTC month and all time (tokens from the proxy's metering). */
   usage?: { month: UsageTotals; total: UsageTotals };
   /** NEAR AI public price of the primary advisor model, $ per 1M tokens. */

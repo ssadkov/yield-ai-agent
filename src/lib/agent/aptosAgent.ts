@@ -92,6 +92,17 @@ export function parseBoostAccount(json: unknown): AptosAgentState | null {
   };
 }
 
+/** Days of Boost Grain a Boost participant gets as AI credits each month. */
+export const BOOST_ALLOWANCE_DAYS = 30;
+
+/**
+ * Monthly AI allowance for a Grain rate in USD a day (`grainPerDay`: the current season's rate on
+ * own capital), times `share`. Not `grainTotal`, which is the whole campaign since 2026-09-07.
+ */
+export function boostMonthlyUsd(grainPerDay: number, share = 1): number {
+  return Number.isFinite(grainPerDay) && grainPerDay > 0 && share > 0 ? grainPerDay * BOOST_ALLOWANCE_DAYS * share : 0;
+}
+
 /** `base` is "" in the browser (same origin as yieldai.app) or the main app's origin on the server. */
 export async function fetchAptosAgent(owner: string, base = "", fetchImpl: typeof fetch = fetch): Promise<AptosAgentState | null> {
   if (!isAptosAddress(owner)) return null;

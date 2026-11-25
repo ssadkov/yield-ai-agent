@@ -329,7 +329,7 @@ With only `NEAR_AI_API_KEY` set, the private chat, attestation, the proof line, 
 | `CREDITS_RECEIVER` | buying credits | Solana address that receives USDC from 1-Click. |
 | `CREDITS_DESTINATION_ASSET` | optional | 1-Click asset id; default USDC on Solana. |
 | `ADVISOR_FREE_USD_PER_MONTH` | optional | Default `0.05`. |
-| `ADVISOR_BOOST_USD_PER_MONTH` | optional | Monthly allowance for Yield AI Boost participants on Aptos, default `1`. |
+| `ADVISOR_BOOST_GRAIN_SHARE` | optional | Boost participants on Aptos get 30 days of their Season 3 Grain a month, times this share; default `1`, `0` off. |
 | `NEXT_PUBLIC_APTOS_GAS_STATION_KEY` | Aptos agent actions | Gas Station key, same as yieldai.app; pays gas for pause, resume and withdraw. |
 | `YIELD_AI_API_ORIGIN` | optional | Where Boost eligibility is read; default `https://yieldai.app`. |
 | `ADVISOR_TRIAL_REQUESTS_PER_DAY`, `ADVISOR_TRIAL_USD_PER_DAY` | optional | Defaults `10` and `0.1`. |

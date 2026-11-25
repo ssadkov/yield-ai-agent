@@ -226,7 +226,7 @@ export function CreditsPanel({ onState }: { onState?: (state: CreditsState | nul
               <span className="text-muted-foreground">
                 {" "}
                 · free left {usd(balance?.freeLeftUsd ?? 0)}
-                {state.boost?.eligible ? ` (Boost: $${state.boost.monthlyUsd.toFixed(2)} a month)` : ""}
+                {state.boost?.eligible ? ` (Boost: 30 days of your Grain, $${state.boost.monthlyUsd.toFixed(2)} a month)` : ""}
                 {solanaWallet ? ` · from your Safe yield ${usd(balance?.yieldLeftUsd ?? 0)}` : ""} · bought{" "}
                 {usd(Math.max(0, balance?.purchasedLeftUsd ?? 0))}
               </span>

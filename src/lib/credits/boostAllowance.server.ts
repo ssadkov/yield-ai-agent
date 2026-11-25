@@ -1,20 +1,22 @@
 /**
- * Yield AI Boost participants get a monthly private-AI allowance.
+ * Yield AI Boost participants get a monthly private-AI allowance: 30 days of the Season 3 Grain
+ * they earn now. `grainPerDay` from the Boost API is the current season's rate on own capital;
+ * the API's `grainTotal` covers the whole campaign since 2026-09-07, so it is not used here.
  *
  * The owner is the Aptos account whose agents Boost counts: a native Aptos wallet signs in as
  * itself; a Solana wallet maps to its derived Aptos account on yieldai.app (the address Phantom
  * uses there). Eligibility comes from the main app's public Boost API, cached for ten minutes.
  */
 import { derivedAptosAddress, PRODUCTION_HOST } from "../agent/aptosDerived.ts";
-import { fetchAptosAgent, isAptosAddress, type AptosAgentState } from "../agent/aptosAgent.ts";
+import { boostMonthlyUsd, fetchAptosAgent, isAptosAddress, type AptosAgentState } from "../agent/aptosAgent.ts";
 import { isSolanaAddress } from "./session.ts";
 
 const CACHE_MS = 10 * 60_000;
 const cache = new Map<string, { at: number; state: AptosAgentState | null }>();
 
-/** Default $1 a month; ADVISOR_BOOST_USD_PER_MONTH overrides, 0 turns the allowance off. */
-export function boostMonthlyUsd(): number {
-  const value = Number(process.env.ADVISOR_BOOST_USD_PER_MONTH ?? "1");
+/** Share of the monthly Grain given as AI credits: `ADVISOR_BOOST_GRAIN_SHARE`, default 1; 0 turns it off. */
+export function boostGrainShare(): number {
+  const value = Number(process.env.ADVISOR_BOOST_GRAIN_SHARE ?? "1");
   return Number.isFinite(value) && value >= 0 ? value : 1;
 }
 
@@ -41,9 +43,15 @@ export async function boostState(wallet: string): Promise<AptosAgentState | null
   }
 }
 
-/** The allowance this wallet earns from Boost this month: the configured amount while eligible. */
-export async function boostAllowanceUsd(wallet: string): Promise<{ owner: string; eligible: boolean; monthlyUsd: number } | null> {
+/**
+ * The allowance this wallet earns from Boost: 30 days of its current Grain while eligible. It
+ * follows the balance, so a deposit or withdrawal changes it once the ten-minute cache expires.
+ */
+export async function boostAllowanceUsd(
+  wallet: string
+): Promise<{ owner: string; eligible: boolean; grainPerDay: number; monthlyUsd: number } | null> {
   const state = await boostState(wallet);
   if (!state) return null;
-  return { owner: state.owner, eligible: state.boost.eligible, monthlyUsd: state.boost.eligible ? boostMonthlyUsd() : 0 };
+  const grainPerDay = state.boost.eligible ? state.boost.grainPerDay : 0;
+  return { owner: state.owner, eligible: state.boost.eligible, grainPerDay, monthlyUsd: boostMonthlyUsd(grainPerDay, boostGrainShare()) };
 }
