@@ -18,9 +18,13 @@ import { loadSafeSummary } from "../agent/safeSummary.server.ts";
 import type { SafeSummary } from "../agent/safeSummary.ts";
 import { DEFAULT_ADVISOR_MODEL } from "../advisor/models.ts";
 import { TYPICAL_REQUEST_USD } from "../advisor/aiPool.ts";
+import { boostAllowanceUsd } from "./boostAllowance.server.ts";
+import { isAptosAddress } from "../agent/aptosAgent.ts";
 
 /** The wallet's Safe, or null when it cannot be read right now. */
 async function safeOrNull(wallet: string, scanFees = false): Promise<SafeSummary | null> {
+  // A native Aptos sign-in has no Solana Safe.
+  if (isAptosAddress(wallet)) return null;
   try {
     return await loadSafeSummary(wallet, false, scanFees);
   } catch {
@@ -44,7 +48,8 @@ function safeDepositUsdc(safe: SafeSummary | null): number {
  */
 export async function openChatUnlocked(wallet: string): Promise<boolean> {
   if ((await purchasedUsd(wallet)) > 0) return true;
-  return safeDepositUsdc(await safeOrNull(wallet)) > 0;
+  if (safeDepositUsdc(await safeOrNull(wallet)) > 0) return true;
+  return Boolean((await boostAllowanceUsd(wallet))?.eligible);
 }
 
 export const ONE_CLICK = "https://1click.chaindefuser.com/v0";
@@ -111,9 +116,10 @@ export async function walletBalance(wallet: string): Promise<CreditBalance> {
 }
 
 async function balanceFrom(wallet: string, safe: SafeSummary | null): Promise<CreditBalance> {
-  const [purchased, spend] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet)]);
+  const [purchased, spend, boost] = await Promise.all([purchasedUsd(wallet), spendByMonth(wallet), boostAllowanceUsd(wallet)]);
   return computeBalance({
-    freeMonthlyUsd: freeMonthlyUsd(),
+    // Boost participants get the larger of the two monthly allowances, not both.
+    freeMonthlyUsd: Math.max(freeMonthlyUsd(), boost?.monthlyUsd ?? 0),
     yieldUsd: safe?.aiBudgetUsdc ?? 0,
     purchasedUsd: purchased,
     spendByMonth: spend,
@@ -157,18 +163,21 @@ export async function walletSummary(wallet: string): Promise<{
   usage: Awaited<ReturnType<typeof usageTotals>>;
   price: ModelPrice | null;
   remaining: ReturnType<typeof estimateRemaining>;
-  /** Whether Open chat is unlocked: USDC in the Safe or any credited purchase. */
+  /** Whether Open chat is unlocked: USDC in the Safe, a credited purchase, or Boost eligibility. */
   openChat: boolean;
+  /** Yield AI Boost on Aptos: the owner it was checked for and the monthly allowance it gives. */
+  boost: { owner: string; eligible: boolean; monthlyUsd: number } | null;
 }> {
   // Billed costs first, so usage totals and the balance read the same numbers.
   await reconcileCosts().catch(() => 0);
   const safe = await safeOrNull(wallet, true);
-  const [balance, purchases, usage, price] = await Promise.all([
+  const [balance, purchases, usage, price, boost] = await Promise.all([
     balanceFrom(wallet, safe),
     listPurchases(wallet),
     usageTotals(wallet),
     advisorModelPrice(),
+    boostAllowanceUsd(wallet),
   ]);
-  const openChat = purchases.some((p) => p.credited) || safeDepositUsdc(safe) > 0;
-  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price), openChat };
+  const openChat = purchases.some((p) => p.credited) || safeDepositUsdc(safe) > 0 || Boolean(boost?.eligible);
+  return { balance, purchases, usage, price, remaining: estimateRemaining(balance.availableUsd, price), openChat, boost };
 }

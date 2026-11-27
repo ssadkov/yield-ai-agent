@@ -25,6 +25,9 @@ Credits turn on when `DATABASE_URL` is set. Visitors without a wallet then get t
 | `DATABASE_URL` | Neon Postgres (Vercel → Storage → Neon). The tables are created on the first request. They hold no prompts and no answers: wallets, NEAR AI request ids with their cost, and purchases. |
 | `SESSION_SECRET` | A random string of 32+ characters. It signs the sign-in challenge, the session token and the trial's IP hash. Changing it signs everyone out. |
 | `ADVISOR_FREE_USD_PER_MONTH` | Free allowance per wallet per month from the AI pool, default `0.05`. |
+| `ADVISOR_BOOST_GRAIN_SHARE` | Wallets earning Yield AI Boost on Aptos get 30 days of their current Season 3 Grain (`grainPerDay` × 30) as a monthly allowance, times this share. Default `1`; `0` turns it off. They get the larger of this and the free allowance, not both. |
+| `NEXT_PUBLIC_APTOS_GAS_STATION_KEY` | Aptos Gas Station key (the same one yieldai.app uses). It pays gas for the owner's pause, resume and withdraw on Aptos agent Safes signed on this page. Without it Petra pays its own gas and a Solana-derived Aptos account cannot send. Public by design: it ships to the browser. |
+| `YIELD_AI_API_ORIGIN` | Where the server reads Boost eligibility (`/api/campaigns/boost/account`), default `https://yieldai.app`. Answers are cached for ten minutes. |
 | `ADVISOR_TRIAL_REQUESTS_PER_DAY`, `ADVISOR_TRIAL_USD_PER_DAY` | The no-wallet trial: requests per visitor per day, and one daily cap for all visitors together. Defaults `10` and `0.1`. |
 | `CREDITS_RECEIVER` | The address 1-Click pays for bought credits (USDC on Solana by default). A separate wallet, not the program's admin or upgrade key. Without it buying is off; the free allowance still works. |
 | `CREDITS_DESTINATION_ASSET` | The asset received, as a 1-Click asset id; default USDC on Solana. |

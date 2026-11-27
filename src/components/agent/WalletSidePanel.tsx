@@ -2,8 +2,9 @@
 
 import { SessionPanel } from "@/components/agent/SessionPanel";
 import { IntentsDepositPanel } from "@/components/agent/IntentsDepositPanel";
-import { SHOW_APTOS } from "@/lib/agent/features";
+import { SHOW_APTOS, SHOW_APTOS_AGENT, SHOW_APTOS_CONNECT } from "@/lib/agent/features";
 import { EarnPanel } from "@/components/agent/EarnPanel";
+import { AptosAgentPanel } from "@/components/agent/AptosAgentPanel";
 
 function truncateAddress(address: string): string {
   if (address.length <= 12) return address;
@@ -96,7 +97,7 @@ export function WalletSidePanel({
           >
             {pending ? "Connecting…" : "Connect Solana wallet"}
           </button>
-          {SHOW_APTOS ? (
+          {SHOW_APTOS_CONNECT ? (
             <button
               type="button"
               disabled={pending}
@@ -138,6 +139,10 @@ export function WalletSidePanel({
       {SHOW_APTOS && connected ? <SessionPanel aptosAddress={aptosAddress} /> : null}
 
       {connected && solanaAddress ? <EarnPanel /> : null}
+
+      {SHOW_APTOS_AGENT && connected ? (
+        <AptosAgentPanel solanaAddress={solanaAddress} aptosAddress={aptosAddress} aptosIsDerived={aptosIsDerived} />
+      ) : null}
 
       {SHOW_APTOS && showDeposit ? (
         <IntentsDepositPanel aptosAddress={aptosAddress} aptosIsDerived={aptosIsDerived} />

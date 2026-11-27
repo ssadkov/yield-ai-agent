@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionCard } from "@/components/agent/ActionCard";
+import { AptosActionCard } from "@/components/agent/AptosActionCard";
 import { ChatMarkdown } from "@/components/agent/ChatMarkdown";
 import {
   clearChatHistory,
@@ -17,7 +18,9 @@ import {
   type UiMessage,
 } from "@/lib/advisor/runTurn";
 import { verifyAnswer, type AttestationSummary } from "@/lib/advisor/nearProxy";
-import { setAdvisorWallet } from "@/lib/advisor/tools";
+import { setAdvisorAptosOwner, setAdvisorWallet } from "@/lib/advisor/tools";
+import { isAptosAddress } from "@/lib/agent/aptosAgent";
+import { derivedAptosAddress, PRODUCTION_HOST } from "@/lib/agent/aptosDerived";
 import {
   DEFAULT_ADVISOR_MODEL,
   IMAGE_MODEL,
@@ -248,12 +251,28 @@ export function AdvisorChatShell() {
       delete root.dataset.chatMode;
     };
   }, [mode, pictureMode]);
+  const [aptosOwner, setAptosOwner] = useState<string | null>(null);
   const onCreditsState = useCallback(
     (state: CreditsState | null, wallet: string | null) => setCredits({ state, wallet }),
     []
   );
-  // The advisor's get_my_account tool reads the connected wallet's Safe.
-  useEffect(() => setAdvisorWallet(credits.wallet), [credits.wallet]);
+  // get_my_account reads the Solana wallet's Safe; get_my_aptos_agents reads the Aptos account Boost
+  // counts: a native Aptos wallet itself, or the account a Solana wallet derives on yieldai.app.
+  useEffect(() => {
+    const wallet = credits.wallet;
+    const aptos = wallet && isAptosAddress(wallet);
+    setAdvisorWallet(wallet && !aptos ? wallet : null);
+    let owner: string | null = aptos ? wallet : null;
+    if (wallet && !aptos) {
+      try {
+        owner = derivedAptosAddress(wallet, PRODUCTION_HOST);
+      } catch {
+        owner = null;
+      }
+    }
+    setAdvisorAptosOwner(owner);
+    setAptosOwner(owner);
+  }, [credits.wallet]);
 
   const messages = histories[mode];
 
@@ -406,6 +425,7 @@ export function AdvisorChatShell() {
                 content: result.assistantText,
                 plan: result.plan ?? undefined,
                 actionCard: result.actionCard ?? undefined,
+                aptosAction: result.aptosAction ?? undefined,
                 ...(result.images?.length ? { images: result.images } : {}),
               }
             : message
@@ -505,7 +525,7 @@ export function AdvisorChatShell() {
         ) : null}
 
         {messages.map((message) => {
-          if (!message.content && !message.actionCard && !message.images?.length && message.role === "assistant") return null;
+          if (!message.content && !message.actionCard && !message.aptosAction && !message.images?.length && message.role === "assistant") return null;
           const isUser = message.role === "user";
           return (
             <div
@@ -558,6 +578,7 @@ export function AdvisorChatShell() {
                       </div>
                     ) : null}
                     {message.actionCard ? <ActionCard card={message.actionCard} /> : null}
+                    {message.aptosAction ? <AptosActionCard card={message.aptosAction} owner={aptosOwner} /> : null}
                     {message.proof || checking.has(message.id) ? (
                       <AnswerProofLine
                         proof={message.proof ?? "checking"}
